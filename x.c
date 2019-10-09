@@ -1660,12 +1660,14 @@ focus(XEvent *ev)
 		return;
 
 	if (ev->type == FocusIn) {
+	        //XXX: add focus in background
 		XSetICFocus(xw.xic);
 		win.mode |= MODE_FOCUSED;
 		xseturgency(0);
 		if (IS_SET(MODE_FOCUS))
 			ttywrite("\033[I", 3, 0);
 	} else {
+                //XXX: change focus out background opacity
 		XUnsetICFocus(xw.xic);
 		win.mode &= ~MODE_FOCUSED;
 		if (IS_SET(MODE_FOCUS))
@@ -1811,12 +1813,14 @@ run(void)
 		 * does filter out the key event and some client message for
 		 * the input method too.
 		 */
-		if (XFilterEvent(&ev, None))
+		if (XFilterEvent(&ev, None)) {
 			continue;
+                }
 		if (ev.type == ConfigureNotify) {
 			w = ev.xconfigure.width;
 			h = ev.xconfigure.height;
 		}
+          printf("%d\n",ev.type);
 	} while (ev.type != MapNotify);
 
 	ttyfd = ttynew(opt_line, shell, opt_io, opt_cmd);
@@ -1868,6 +1872,7 @@ run(void)
 		if (dodraw) {
 			while (XPending(xw.dpy)) {
 				XNextEvent(xw.dpy, &ev);
+				printf("%d\n", ev.type);
 				if (XFilterEvent(&ev, None))
 					continue;
 				if (handler[ev.type])
