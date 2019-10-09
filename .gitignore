@@ -1,0 +1,10 @@
+.idea
+*.swp
+*.o
+st
+build
+patches
+config.h
+cmake-build-debug
+
+
