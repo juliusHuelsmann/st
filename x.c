@@ -1682,21 +1682,27 @@ focus(XEvent *ev)
 		return;
 
 	if (ev->type == FocusIn) {
-		focused = true;
 		XSetICFocus(xw.xic);
 		win.mode |= MODE_FOCUSED;
 		xseturgency(0);
 		if (IS_SET(MODE_FOCUS))
 			ttywrite("\033[I", 3, 0);
+	if (!focused) {
+			focused = true;
+			xloadcols();
+			redraw();
+		}
 	} else {
-		focused = false;
 		XUnsetICFocus(xw.xic);
 		win.mode &= ~MODE_FOCUSED;
 		if (IS_SET(MODE_FOCUS))
 			ttywrite("\033[O", 3, 0);
+	if (focused) {
+			focused = false;
+			xloadcols();
+			redraw();
+		}
 	}
-	xloadcols();
-	redraw();
 }
 
 int
