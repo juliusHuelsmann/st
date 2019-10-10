@@ -165,11 +165,19 @@ static MouseShortcut mshortcuts[] = {
 	{ Button5,              XK_ANY_MOD,     "\005" },
 };
 
+
+// static pipe
+static char *openurlcmd[] = { "/bin/sh", "-c",
+	"xurls | rofi -dmenu -l 10 -w $WINDOWID | xargs -r open",
+	"externalpipe", NULL };
+
 /* Internal keyboard shortcuts. */
 #define MODKEY Mod1Mask
 #define TERMMOD (ControlMask|ShiftMask)
 
 static Shortcut shortcuts[] = {
+  // external pipe
+	{ TERMMOD, XK_u, externalpipe, { .v = openurlcmd } },
 	/* mask                 keysym          function        argument */
 	{ XK_ANY_MOD,           XK_Break,       sendbreak,      {.i =  0} },
 	{ ControlMask,          XK_Print,       toggleprinter,  {.i =  0} },
