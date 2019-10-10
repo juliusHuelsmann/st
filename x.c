@@ -2086,7 +2086,7 @@ run:
 
 	if (!(xw.dpy = XOpenDisplay(NULL)))
 		die("can't open display\n");
-
+	config_init();
 
 	cols = MAX(cols, 1);
 	rows = MAX(rows, 1);
