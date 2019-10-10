@@ -208,18 +208,19 @@ static char *openurlcmd[] = { "/bin/sh", "-c",
 
 /* Internal keyboard shortcuts. */
 #define MODKEY Mod1Mask
-#define TERMMOD (ControlMask|ShiftMask)
+#define AltMask Mod1Mask
+#define TERMMOD (AltMask|ShiftMask)
 
 static Shortcut shortcuts[] = {
   // external pipe
 	{ TERMMOD, XK_u, externalpipe, { .v = openurlcmd } },
 	/* mask                 keysym          function        argument */
 	{ XK_ANY_MOD,           XK_Break,       sendbreak,      {.i =  0} },
-	{ ControlMask,          XK_Print,       toggleprinter,  {.i =  0} },
+	{ AltMask,          XK_Print,       toggleprinter,  {.i =  0} },
 	{ ShiftMask,            XK_Print,       printscreen,    {.i =  0} },
 	{ XK_ANY_MOD,           XK_Print,       printsel,       {.i =  0} },
-	{ ControlMask,          XK_m,      zoom,           {.f = +1} },
-	{ ControlMask,          XK_n, zoom,           {.f = -1} },
+	{ AltMask,          XK_m,      zoom,           {.f = +1} },
+	{ AltMask,          XK_n, zoom,           {.f = -1} },
 	{ TERMMOD,              XK_Home,        zoomreset,      {.f =  0} },
 	{ TERMMOD,              XK_C,           clipcopy,       {.i =  0} },
 	{ TERMMOD,              XK_V,           clippaste,      {.i =  0} },
@@ -228,8 +229,8 @@ static Shortcut shortcuts[] = {
 	{ TERMMOD,              XK_Num_Lock,    numlock,        {.i =  0} },
 	{ TERMMOD,          XK_K,     kscrollup,      {.i = -1} },
 	{ TERMMOD,          XK_J,   kscrolldown,    {.i = -1} },
-	{ ControlMask,          XK_k,     kscrollup,      {.i = 1} },
-	{ ControlMask,          XK_j,   kscrolldown,    {.i = 1} },
+	{ AltMask,          XK_k,     kscrollup,      {.i = 1} },
+	{ AltMask,          XK_j,   kscrolldown,    {.i = 1} },
 };
 
 /*
