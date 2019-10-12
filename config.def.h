@@ -212,6 +212,7 @@ static char *openurlcmd[] = { "/bin/sh", "-c",
 #define MODKEY Mod1Mask
 #define AltMask Mod1Mask
 #define TERMMOD (AltMask|ShiftMask)
+#define CTRLMOD (AltMask|ShiftMask)
 
 static Shortcut shortcuts[] = {
   // external pipe
@@ -223,9 +224,13 @@ static Shortcut shortcuts[] = {
 	{ XK_ANY_MOD,           XK_Print,       printsel,       {.i =  0} },
 	{ AltMask,          XK_m,      zoom,           {.f = +1} },
 	{ AltMask,          XK_n, zoom,           {.f = -1} },
+	//{ ControlMask,          XK_KP_Add,      zoom,           {.f = +1} },
+	//{ ControlMask,          XK_KP_Subtract, zoom,           {.f = -1} },
 	{ TERMMOD,              XK_Home,        zoomreset,      {.f =  0} },
 	{ TERMMOD,              XK_C,           clipcopy,       {.i =  0} },
 	{ TERMMOD,              XK_V,           clippaste,      {.i =  0} },
+	{ CTRLMOD,              XK_C,           clipcopy,       {.i =  0} },
+	{ CTRLMOD,              XK_V,           clippaste,      {.i =  0} },
 	{ TERMMOD,              XK_Y,           selpaste,       {.i =  0} },
 	{ ShiftMask,            XK_Insert,      selpaste,       {.i =  0} },
 	{ TERMMOD,              XK_Num_Lock,    numlock,        {.i =  0} },
