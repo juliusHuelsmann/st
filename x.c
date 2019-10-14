@@ -154,7 +154,6 @@ typedef struct {
 static inline ushort sixd_to_16bit(int);
 static int xmakeglyphfontspecs(XftGlyphFontSpec *, const Glyph *, int, int, int);
 static void xdrawglyphfontspecs(const XftGlyphFontSpec *, Glyph, int, int, int);
-static void xdrawglyph(Glyph, int, int);
 static void xclear(int, int, int, int);
 static int xgeommasktogravity(int);
 static void ximopen(Display *);
@@ -749,6 +748,14 @@ xloadcolor(int i, const char *name, Color *ncolor)
 
 	return XftColorAllocName(xw.dpy, xw.vis, xw.cmap, name, ncolor);
 }
+
+void
+normalMode(Arg const *_)  //< the argument is just for the sake of 
+                          //  adhering to the function format. 
+{
+		win.mode ^= MODE_NORMAL; //< toggle normal mode via exclusive or.
+}
+
 
 void
 xloadcols(void)
@@ -1782,6 +1789,11 @@ kpress(XEvent *ev)
 		return;
 
 	len = XmbLookupString(xw.xic, e, buf, sizeof buf, &ksym, &status);
+	if (IS_SET(MODE_NORMAL)) {
+		kpressNormalMode(ksym, ksym == XK_Escape, ksym == XK_Return);
+		return;
+	}
+
 	/* 1. shortcuts */
 	for (bp = shortcuts; bp < shortcuts + LEN(shortcuts); bp++) {
 		if (ksym == bp->keysym && match(bp->mod, e->state)) {

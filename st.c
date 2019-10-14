@@ -1,8 +1,10 @@
 /* See LICENSE for license details. */
+#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <math.h>
 #include <pwd.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -35,7 +37,8 @@
 #define ESC_ARG_SIZ   16
 #define STR_BUF_SIZ   ESC_BUF_SIZ
 #define STR_ARG_SIZ   ESC_ARG_SIZ
-#define HISTSIZE      2000
+//#define HISTSIZE      2000
+#define HISTSIZE      100
 
 /* macros */
 #define IS_SET(flag)		((term.mode & (flag)) != 0)
@@ -44,6 +47,9 @@
 #define ISCONTROL(c)		(ISCONTROLC0(c) || ISCONTROLC1(c))
 #define ISDELIM(u)		(u && wcschr(worddelimiters, u))
 #define TLINE(y)		((y) < term.scr ? term.hist[((y) + term.histi - \
+				term.scr + HISTSIZE + 1) % HISTSIZE] : \
+				term.line[(y) - term.scr])
+#define HLINE(y)		((y) < term.scr ? term.hist[((y) + term.histi - \
 				term.scr + HISTSIZE + 1) % HISTSIZE] : \
 				term.line[(y) - term.scr])
 
@@ -1094,6 +1100,7 @@ tscrolldown(int orig, int n, int copyhist)
 
 	if (copyhist) {
 		term.histi = (term.histi - 1 + HISTSIZE) % HISTSIZE;
+		printf("%d histi changed!", term.histi);
 		temp = term.hist[term.histi];
 		term.hist[term.histi] = term.line[term.bot];
 		term.line[term.bot] = temp;
@@ -1121,6 +1128,7 @@ tscrollup(int orig, int n, int copyhist)
 
 	if (copyhist) {
 		term.histi = (term.histi + 1) % HISTSIZE;
+		printf("%d histi changed!", term.histi);
 		temp = term.hist[term.histi];
 		term.hist[term.histi] = term.line[orig];
 		term.line[orig] = temp;
@@ -1182,6 +1190,282 @@ tnewline(int first_col)
 		y++;
 	}
 	tmoveto(first_col ? 0 : term.c.x, y);
+}
+
+
+//XXX: move this to the appropriate position
+struct NormalModeState {
+	struct OperationState {
+		enum Operation {
+			noop,
+			visual,
+			visualLine,
+			yank
+		} op;
+		int8_t search;
+		uint32_t startX;
+		uint32_t startY;
+	} command;
+
+	struct MoveState {
+		uint32_t amount;
+	} move;
+
+
+
+} stateNormalMode;
+// Normal mode search + command string.
+struct String {
+	uint32_t index;
+	uint32_t size;
+	char* content;
+} searchString = {0, 0, NULL};
+struct String commandString = {0, 0, NULL};
+
+
+int mod(int a, int b) {
+	while (a < 0) {
+		a+= b;
+	}
+	return a % b;
+}
+
+void emptyString(struct String* s) { s->index = 0; }
+
+void appendString(struct String* s, char c) {
+	if (s->index >= s->size) { s->content = (char *) realloc(s->content, s->size += 15); }
+	s->content[s->index++] = c;
+}
+
+void displayString(struct String const *str, Glyph *g, int line) {
+	// XXX not the way to go ;) 
+	//term.col - str->index;
+	uint32_t minIndex = str->index - 1 > term.col / 3 ?  str->index - 1 - term.col / 3 : 0;
+	for (int64_t i = str->index-1; i >= minIndex ; i--) {
+		g->u = str->content[i];
+		term.line[line][term.col + (i - str->index - 1)] = *g;
+	}
+	term.dirty[line] = 1;
+}
+
+void appendCommandString(char c) {
+	appendString(&commandString, c);
+	Glyph g = {'c', ATTR_ITALIC | ATTR_FAINT , defaultfg, defaultbg};
+	displayString(&commandString, &g, term.row - 1);
+}
+
+
+void appendSearchString(char c) {
+	appendString(&searchString, c);
+	Glyph g = {'c', ATTR_ITALIC | ATTR_BOLD_FAINT, defaultfg, defaultbg};
+	displayString(&searchString, &g, term.row - 2);
+}
+
+/// Default state if no operation is performed.
+struct NormalModeState defaultNormalMode = {{noop, 0, 0, 0}, {0}};
+
+void kpressNormalMode(char ksym, bool esc, bool enter) {
+	// [ESC] or [ENTER] abort resp. finish the current operation or 
+	// the Normal Mode if no operation is currently executed.
+	if (esc || enter) {
+		if (stateNormalMode.command.op == noop 
+				&& stateNormalMode.command.search == 0
+				&& stateNormalMode.move.amount == 0) {
+			normalMode(NULL);
+			redraw(); //XXX: this does not really work.
+		} else {
+			stateNormalMode = defaultNormalMode;
+		}
+		emptyString(&commandString);
+		emptyString(&searchString);
+		tfulldirt();
+		redraw();
+		//xdrawline(TLINE(term.row-1), 0, term.row-1, term.col-1);
+		drawregion(0, 0, term.col-1, term.row-1);
+		return;
+	} 
+	// Search: append to search string.
+	if (stateNormalMode.command.search && !esc && !enter) { 
+		appendCommandString(ksym);
+		appendSearchString(ksym);
+		return;
+	}
+	// V / v or y take precedence over movement commands.
+	switch(ksym) {
+		case 'y': //< Yank mode
+			switch(stateNormalMode.command.op) {
+				case noop:       //< Start yank mode & set #op
+					stateNormalMode.command.op = yank;
+					stateNormalMode.command.startX = term.c.x;
+					stateNormalMode.command.startY = term.c.y; //YYY: check.
+					break;
+				case visualLine: //< Complete yank operation
+				case visual:
+					//XXX: Yank the selection!
+					stateNormalMode = defaultNormalMode;
+					emptyString(&commandString);
+					emptyString(&searchString);
+					normalMode(NULL);
+					redraw(); //XXX: this does not really work.
+					break;
+				case yank:       //< Complete yank operation as in y#amount j
+					//computeMovement(
+					//XXX:
+					break;
+			}
+			appendCommandString(ksym);
+			return;
+
+			// Visual Mode: Toggle mode.
+		case 'v':
+		case 'V':
+			{
+				enum Operation mode = ksym == 'v' ? visual : visualLine;
+				bool assign = stateNormalMode.command.op != mode;
+				stateNormalMode = defaultNormalMode;
+				if (assign) {
+					stateNormalMode.command.op = mode;
+					stateNormalMode.command.startX = term.c.x;
+					stateNormalMode.command.startY = term.c.y; //YYY: check.
+				}
+			}
+			appendCommandString(ksym);
+			return;
+	}
+	// Perform the movement.
+	int32_t x = term.c.x;
+	int32_t y = term.c.y;
+	int32_t sign = -1;
+	bool discard = false; //< discard input
+	switch(ksym) {
+		case 'j': sign = 1;
+		case 'k': 
+			 y += sign * MAX(stateNormalMode.move.amount, 1);
+			 stateNormalMode.move.amount = 0; 
+			 break;
+		case 'l': sign = 1;
+		case 'h':
+			{
+				int32_t amount = x + sign * MAX(stateNormalMode.move.amount, 1);
+				x = amount % term.col;
+				while (x < 0) { x += term.col; }
+				y += floor(1.0 * amount / term.col);
+				stateNormalMode.move.amount = 0; 
+			}
+			break;
+		case 'W': sign = 1;
+		case 'B':
+			// doesn't work exactly as in vim, but I think this version is better; 
+			// Linebreak is counted as 'normal' separator; hence a jump can span multiple lines here.
+			stateNormalMode.move.amount = MAX(stateNormalMode.move.amount, 1);
+			for (; stateNormalMode.move.amount > 0; stateNormalMode.move.amount--) {
+				for (uint8_t state = 0; state < 3; x+=sign) {
+					// If there is a linebreak, update the x - y coordinate
+					if (!BETWEEN(x, 0, term.col-1)) {
+						if (sign == -1 && state == 2) {
+							state = 3;
+							x++;
+							break;
+						} else { 
+							if (x < 0) {
+								x = term.col - 1;
+								y--;
+							} else {
+								x = 0;
+								y++;
+							}
+						}
+					}
+					int diff =(y - term.scr);
+					if (diff == -HISTSIZE) { diff = term.row - 1; }
+					char c;// = TLINE((y + term.scr) % HISTSIZE)[x].u;
+					if (0 <= diff && diff < term.row) {
+						c = term.line[diff][x].u;
+					} else {
+						c = term.hist[(diff + term.histi + HISTSIZE + 1) % HISTSIZE][x].u;
+					}
+					if (c == '\t' || c == ' ') { 
+						if (state == 2) { // && sign == -1) { 
+							state = 3;
+							x++;
+							break;
+						} else {
+							state = 1;
+						}
+					} else if (state == 1) {
+						if (sign == 1) { 
+							state = 3; 
+							break;
+						} else {
+							state = 2;
+						}
+					}
+				}
+			}
+			break;
+		case '/': stateNormalMode.command.search = 1; break;
+		case '?': stateNormalMode.command.search = -1; break;
+		default:
+			if (BETWEEN(ksym, 48, 57)) { //< record numbers
+				stateNormalMode.move.amount = MIN(SHRT_MAX, stateNormalMode.move.amount * 10 + ksym - 48);
+				printf("amount: %d", stateNormalMode.move.amount);
+			} else {
+				discard = true;
+			}
+		}
+		if (!discard) {
+			appendCommandString(ksym);
+		}
+		//XXX: Write current char sequence to screen
+		//XXX: write search string to screen.
+		//XXX: record last character sequence somewhere. (dot)
+		//XXX:  Implement w/b the same way as W/B, but using list of separator chars.
+	// If !yank change the current position, 
+	// else     yank & complete op, but leave the current position unchanged
+	// XXX:
+	if (false) {
+
+	} else {
+		
+		term.c.x   = x;
+		term.c.y   = y;
+
+		int diff = 0;
+		if (y > 0) {
+			if (y > term.bot) {
+				diff = term.bot - y;
+				term.c.y = term.bot;
+			}
+		} else {
+			if (y < 0) {
+				diff = -y;
+				term.c.y = 0;
+			}
+		}
+		// if the #histi has been crossed, jA
+		int newScr = term.scr + diff;
+		if (newScr < 0) {
+		//if (newScr <= term.histi  && term.scr > term.histi) {
+			term.c.y = 0;
+		//} else if (newScr >= term.histi && term.scr < term.histi) {
+		} else if (newScr >= HISTSIZE) {
+			term.c.y = term.bot;
+		} 
+		newScr = mod(newScr, HISTSIZE);
+		
+		//term.c.y   = INTERVAL(y, 0, term.bot);
+		//int newScr = -INTERVAL_DIFF(term.scr-y, 0, term.bot);
+		//newScr     = mod(newScr, HISTSIZE); //INTERVAL(newScr, 0, HISTSIZE);
+		int n      = term.scr - newScr;
+		term.scr = newScr;
+		printf("%d, %d\n", term.c.y, newScr);
+
+		// debug: output the line 
+		//for(int j = 0; j < term.col -1; j++) { printf("%c", TLINE(term.c.y)[j].u); } printf("\n");
+
+		selscroll(0, n);
+		tfulldirt();    //< all lines are dirty now.
+	}
 }
 
 void
@@ -2694,9 +2978,8 @@ draw(void)
 		cx--;
 
 	drawregion(0, 0, term.col, term.row);
-	if (term.scr == 0)
-		xdrawcursor(cx, term.c.y, term.line[term.c.y][cx],
-				term.ocx, term.ocy, term.line[term.ocy][term.ocx]);
+	xdrawcursor(cx, term.c.y, TLINE(term.c.y)[cx],
+			term.ocx, term.ocy, TLINE(term.ocy)[term.ocx]);
 	term.ocx = cx, term.ocy = term.c.y;
 	xfinishdraw();
 	xximspot(term.ocx, term.ocy);

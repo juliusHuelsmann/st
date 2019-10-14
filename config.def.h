@@ -215,7 +215,8 @@ static char *openurlcmd[] = { "/bin/sh", "-c",
 #define CTRLMOD (AltMask|ShiftMask)
 
 static Shortcut shortcuts[] = {
-  // external pipe
+	{ AltMask,              XK_c,      normalMode,{} },
+	// external pipe
 	{ TERMMOD, XK_u, externalpipe, { .v = openurlcmd } },
 	/* mask                 keysym          function        argument */
 	{ XK_ANY_MOD,           XK_Break,       sendbreak,      {.i =  0} },

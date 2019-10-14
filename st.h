@@ -1,5 +1,6 @@
 /* See LICENSE for license details. */
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -10,6 +11,8 @@
 #define BETWEEN(x, a, b)	((a) <= (x) && (x) <= (b))
 #define DIVCEIL(n, d)		(((n) + ((d) - 1)) / (d))
 #define DEFAULT(a, b)		(a) = (a) ? (a) : (b)
+#define INTERVAL(x, a, b)		(x) < (a) ? (a) : (x) > (b) ? (b) : (x)
+#define INTERVAL_DIFF(x, a, b)		(x) < (a) ? (x) - (a) : (x) > (b) ? (x) - (b) : 0
 #define LIMIT(x, a, b)		(x) = (x) < (a) ? (a) : (x) > (b) ? (b) : (x)
 #define ATTRCMP(a, b)		((a).mode != (b).mode || (a).fg != (b).fg || \
 				(a).bg != (b).bg)
@@ -76,6 +79,7 @@ typedef union {
 	const void *v;
 } Arg;
 
+
 void die(const char *, ...);
 void redraw(void);
 void draw(void);
@@ -83,6 +87,8 @@ void draw(void);
 void externalpipe(const Arg *);
 void kscrolldown(const Arg *);
 void kscrollup(const Arg *);
+void kpressNormalMode(char symbol, bool esc, bool enter);
+void normalMode(Arg const *);
 void printscreen(const Arg *);
 void printsel(const Arg *);
 void sendbreak(const Arg *);
@@ -112,6 +118,8 @@ size_t utf8encode(Rune, char *);
 void *xmalloc(size_t);
 void *xrealloc(void *, size_t);
 char *xstrdup(char *);
+
+
 
 /* config.h globals */
 extern char *utmp;
