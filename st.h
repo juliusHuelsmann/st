@@ -85,6 +85,7 @@ void redraw(void);
 void draw(void);
 
 void externalpipe(const Arg *);
+int highlighted(int, int);
 void kscrolldown(const Arg *);
 void kscrollup(const Arg *);
 void kpressNormalMode(char symbol, bool esc, bool enter, bool bckspace);
@@ -135,3 +136,5 @@ extern unsigned int defaultfg;
 extern unsigned int defaultbg;
 extern float alpha;
 extern float alphaUnfocussed;
+extern char wordDelimSmall[];
+extern char wordDelimLarge[];

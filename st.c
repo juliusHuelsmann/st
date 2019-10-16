@@ -518,6 +518,13 @@ selected(int x, int y)
 	    && (y != sel.ne.y || x <= sel.ne.x);
 }
 
+int 
+highlighted(int x, int y)
+{
+	return 0;
+
+}
+
 void
 selsnap(int *x, int *y, int direction)
 {
@@ -1195,6 +1202,7 @@ struct Position {
 	uint32_t yScr;
 };
 
+// XXX: split this a little bit up
 struct NormalModeState {
 	struct Position initialPosition;
 	// Operation:
@@ -1215,8 +1223,10 @@ struct NormalModeState {
 			forward,
 			backward,
 		} search;
+		struct Position searchPosition;
 	} motion;
 } stateNormalMode;
+
 // Normal mode search + command string.
 struct String {
 	uint32_t index;
@@ -1241,7 +1251,6 @@ void appendString(struct String* s, char c) {
 }
 
 void displayString(struct String const *str, Glyph *g, int yPos) {
-
 	// Threshold: if there is nothing or no space to print, do not print.
 	if (term.col == 0 || str->index == 0) { 
 		term.dirty[yPos] = 1; //< mark this line as 'dirty', because the line is not 
@@ -1278,7 +1287,6 @@ void appendCommandString(char c) {
 }
 
 void printSearchString() {
-
 	Glyph g = {'c', ATTR_ITALIC | ATTR_BOLD_FAINT, defaultfg, defaultbg};
 	displayString(&searchString, &g, term.row - 2);
 }
@@ -1289,7 +1297,7 @@ void appendSearchString(char c) {
 }
 
 /// Default state if no operation is performed.
-struct NormalModeState defaultNormalMode = {{0,0,0}, {noop, {0, 0, 0}}, {0, none}};
+struct NormalModeState defaultNormalMode = {{0,0,0}, {noop, {0, 0, 0}}, {0, none, {0, 0, 0}}};
 
 void enableMode(enum Operation o) {
 	stateNormalMode.command.op = o;
@@ -1304,10 +1312,10 @@ void onNormalModeStart() {
 	stateNormalMode.initialPosition.yScr = term.scr;
 }
 
-void onNormalModeStop() {
-	term.c.x = stateNormalMode.initialPosition.x; //< dunno what happens if resized...
-	term.c.y = stateNormalMode.initialPosition.y; //< dunno what happens if resized...
-	term.scr = stateNormalMode.initialPosition.yScr; //< dunno what happens if resized...
+void onNormalModeStop() { //XXX breaks if resized
+	term.c.x = stateNormalMode.initialPosition.x;
+	term.c.y = stateNormalMode.initialPosition.y;
+	term.scr = stateNormalMode.initialPosition.yScr;
 }
 
 void moveLetter(int8_t sign) {
@@ -1337,6 +1345,25 @@ void moveLetter(int8_t sign) {
 	}
 }
 
+/// Find the next occurrence of
+void toNext(struct String *string, struct Position *stopPosition) {
+
+}
+
+/// XXX: i don't actually know how to do this, because I think, that #toNext will shift the screen, 
+///      which  -- in turn -- requires a repaint, which then will override the hightlighted
+///      sections.
+// Idea: maybe place this into the drawing routine!
+void highlightOnScreen(struct String * string, uint16_t startY, uint16_t stopY) {
+
+}
+
+
+bool contains (char ksym, char const * values, uint32_t amount) {
+	for (uint32_t i = 0; i < amount; i++) { if (ksym == values[i]) { return true; } }
+	return false;
+}
+
 void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 	// [ESC] or [ENTER] abort resp. finish the current operation or 
 	// the Normal Mode if no operation is currently executed.
@@ -1344,23 +1371,25 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 		if (stateNormalMode.command.op == noop 
 				&& stateNormalMode.motion.search == none
 				&& stateNormalMode.motion.amount == 0) {
-			printf("hier reset\n");
 			normalMode(NULL);
 			redraw(); //XXX: this does not really work.
 		} else {
 			stateNormalMode.command = defaultNormalMode.command;
 			stateNormalMode.motion = defaultNormalMode.motion;
 		}
+		selclear();
 		emptyString(&commandString);
 		emptyString(&searchString);
 		tfulldirt();
 		redraw();
 		drawregion(0, 0, term.col, term.row);
 		return;
-	} 
-	// Search: append to search string.
-	if (stateNormalMode.motion.search != none && !esc && !enter) { 
-
+	} //< ! (esc || enter)
+	// Search: append to search string & conduct search for best hit, starting at start pos,
+	//         highlighting all other occurrences on the current page if one is found.
+	if (stateNormalMode.motion.search != none) {  
+		struct Position searchStartPosition;
+		struct Position searchStopPosition = stateNormalMode.motion.searchPosition;
 		if (backspace) {
 			if (commandString.index > 0 && searchString.index > 0) {
 				commandString.index--;
@@ -1368,10 +1397,20 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 				printCommandString();
 				printSearchString();
 			}
-		} else {
+			searchStartPosition = stateNormalMode.motion.searchPosition;
+		} else { 
 			appendCommandString(ksym);
 			appendSearchString(ksym);
+			searchStartPosition.x = term.c.x;   //< it is now `harder` to find the string, hence
+			searchStartPosition.y = term.c.y;   //  all positions that did not match until now
+			searchStartPosition.yScr = term.scr;//  will not match the longer string.
 		}
+		// Apply start position.
+		
+		// conduct search, starting at start pos
+		
+		// highlight all other on term, starting at last found position.
+
 		return;
 	}
 	// V / v or y take precedence over movement commands.
@@ -1384,11 +1423,13 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 				case visualLine: //< Complete yank operation
 				case visual:
 					//XXX: Yank the selection!
-					stateNormalMode = defaultNormalMode;
+					
+					
+					
+					stateNormalMode.command = defaultNormalMode.command;
+					stateNormalMode.motion = defaultNormalMode.motion;
 					emptyString(&commandString);
 					emptyString(&searchString);
-					normalMode(NULL);
-					redraw(); //XXX: this does not really work.
 					break;
 				case yank:       //< Complete yank operation as in y#amount j
 					//computeMovement(
@@ -1408,6 +1449,14 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 				stateNormalMode = defaultNormalMode;
 				if (assign) {
 					enableMode(mode);
+					if (mode == visualLine) {
+						selstart(0, term.c.y, 0);
+						selextend(term.col-1, term.c.y, 0, 0);
+					} else {
+						selstart(term.c.x, term.c.y, 0);
+					}
+				} else {
+					selclear();
 				}
 			}
 			emptyString(&commandString);
@@ -1415,87 +1464,88 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 			return;
 	}
 	// Perform the movement.
-	int32_t sign = -1;
-	bool discard = false; //< discard input
+	int32_t sign = -1;    //< whehter a command goes 'forward' (1) or 'backward' (-1)
+	bool discard = false; //< discard input, as it does not have a meaning.
 	switch(ksym) {
 		case 'j': sign = 1;
 		case 'k': 
 			 term.c.y += sign * MAX(stateNormalMode.motion.amount, 1);
-			 stateNormalMode.motion.amount = 0; 
 			 break;
-			 // XXX: H, L
+		case 'H': term.c.y = 0;            break; //< [numer]H ~ L[number]j is not supported.
+		case 'M': term.c.y = term.bot / 2; break;
+		case 'L': term.c.y = term.bot;     break; //< [numer]L ~ L[number]k is not supported.
 		case 'l': sign = 1;
 		case 'h':
-			{
-				int32_t amount = term.c.x + sign * MAX(stateNormalMode.motion.amount, 1);
-				term.c.x = amount % term.col;
-				while (term.c.x < 0) { term.c.x += term.col; }
-				term.c.y += floor(1.0 * amount / term.col);
-				stateNormalMode.motion.amount = 0; 
-			}
+		{
+			int32_t const amount = term.c.x + sign * MAX(stateNormalMode.motion.amount, 1);
+			term.c.x = amount % term.col;
+			while (term.c.x < 0) { term.c.x += term.col; }
+			term.c.y += floor(1.0 * amount / term.col);
 			break;
+		}
+		case '0': term.c.x = 0;        break;
+		case '$': term.c.x = term.col; break;
 		case 'w':
 		case 'W': 
 		case 'e': 
-		case 'E': 
-			sign = 1;
+		case 'E': sign = 1;
 		case 'B':
 		case 'b':
 		{
 			bool const startSpaceIsSeparator = !(ksym == 'w' || ksym == 'W');
-			bool const capital = ksym < 61; //XXX:
-			bool const performOffset = startSpaceIsSeparator;
-			uint32_t const maxIteration = (HISTSIZE + term.row)* term.col; 
-
-			if (performOffset) { moveLetter(sign); }
+			bool const capital = ksym <= 90; //< defines the word separators to use 
+			char const * const wDelim = capital ? wordDelimLarge : wordDelimSmall; 
+			uint32_t const wDelimLen =  strlen(wDelim);
+			bool const performOffset = startSpaceIsSeparator; //< start & end with offset.
+			uint32_t const maxIteration = (HISTSIZE + term.row) * term.col;  //< one complete traversal.
 
 			// doesn't work exactly as in vim, but I think this version is better;   
 			// Linebreak is counted as 'normal' separator; hence a jump can span multiple lines here. 
 			stateNormalMode.motion.amount = MAX(stateNormalMode.motion.amount, 1);
 			for (; stateNormalMode.motion.amount > 0; stateNormalMode.motion.amount--) {
 				uint8_t state = 0;
+				if (performOffset) { moveLetter(sign); }
 				for (uint32_t cIteration = 0; cIteration ++ < maxIteration; moveLetter(sign)) {
-
-					char c = TLINE(term.c.y)[term.c.x].u;  
-					if ((c == '\t' || c == ' ') == startSpaceIsSeparator)  {         
+					if (startSpaceIsSeparator == contains(TLINE(term.c.y)[term.c.x].u, wDelim, wDelimLen)) {
 						if (state == 1) {
 							if (performOffset) { moveLetter(-sign); } 
 							break;
 						}
-					} else {
-						if (state == 0) { state = 1; }
-					}
+					} else if (state == 0) { state = 1; }
 				}
 			}
 			break;
 		}
-		case '/': stateNormalMode.motion.search = forward; break;
-		case '?': stateNormalMode.motion.search = backward; break;
+		case '/': sign = 1;
+		case '?': 
+			stateNormalMode.motion.search = sign == 1 ? forward : backward; 
+			stateNormalMode.motion.searchPosition.x = term.c.x;
+			stateNormalMode.motion.searchPosition.y = term.c.y;
+			stateNormalMode.motion.searchPosition.yScr = term.scr;
+			break;
 		default:
-			if (BETWEEN(ksym, 48, 57)) { //< record numbers
-				stateNormalMode.motion.amount = MIN(SHRT_MAX, stateNormalMode.motion.amount * 10 + ksym - 48);
-				printf("amount: %d", stateNormalMode.motion.amount);
-			} else {
-				discard = true;
-			}
+			discard = true;
 		}
+		if (BETWEEN(ksym, 48, 57)) { //< record numbers
+			discard = false;
+			stateNormalMode.motion.amount = 
+			MIN(SHRT_MAX, stateNormalMode.motion.amount * 10 + ksym - 48);
+		} else if (!discard) {
+			stateNormalMode.motion.amount = 0; 
+		}
+
 		if (!discard) {
 			appendCommandString(ksym);
 		}
-		//XXX: Write current char sequence to screen
-		//XXX: write search string to screen.
 		//XXX: record last character sequence somewhere. (dot)
-		//XXX:  Implement w/b the same way as W/B, but using list of separator chars.
-	// If !yank change the current position, 
-	// else     yank & complete op, but leave the current position unchanged
-	// XXX:
+		// If !yank change the current position, 
+		// else     yank & complete op, but leave the current position unchanged
+		// XXX:
+
+
 	if (false) {
 
 	} else {
-		
-		//term.c.x   = x;
-		//term.c.y   = y;
-
 		int diff = 0;
 		if (term.c.y > 0) {
 			if (term.c.y > term.bot) {
@@ -1536,6 +1586,28 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 		tsetdirt(0, term.row-3);
 		printCommandString();
 		printSearchString();
+	}
+
+	int32_t scrDiff = term.scr - stateNormalMode.command.startPosition.yScr;
+
+	int32_t minY = term.c.y;
+	int32_t maxY = INTERVAL(stateNormalMode.command.startPosition.y + scrDiff, 0, term.bot);
+	int32_t minX = term.c.x;
+	int32_t maxX = stateNormalMode.command.startPosition.x;
+
+	if (minY > maxY) {
+		minY = maxY;
+		maxY = term.c.y;
+		minX = maxX;
+		maxX = term.c.x;
+	}
+
+	if (stateNormalMode.command.op == visual) { 
+		selstart(minX, minY, 0);
+		selextend(maxX, maxY, 0, 0);
+	} else if (stateNormalMode.command.op == visualLine) {
+		selstart(0, minY, 0);
+		selextend(term.col - 1, maxY, 0, 0);
 	}
 }
 
