@@ -753,7 +753,12 @@ void
 normalMode(Arg const *_)  //< the argument is just for the sake of 
                           //  adhering to the function format. 
 {
-		win.mode ^= MODE_NORMAL; //< toggle normal mode via exclusive or.
+	win.mode ^= MODE_NORMAL; //< toggle normal mode via exclusive or.
+	if (win.mode & MODE_NORMAL) {
+		onNormalModeStart();
+	} else {
+		onNormalModeStop();
+	}
 }
 
 
@@ -1790,7 +1795,7 @@ kpress(XEvent *ev)
 
 	len = XmbLookupString(xw.xic, e, buf, sizeof buf, &ksym, &status);
 	if (IS_SET(MODE_NORMAL)) {
-		kpressNormalMode(ksym, ksym == XK_Escape, ksym == XK_Return);
+		kpressNormalMode(ksym, ksym == XK_Escape, ksym == XK_Return, ksym == XK_BackSpace);
 		return;
 	}
 
@@ -1933,8 +1938,10 @@ run(void)
 				XNextEvent(xw.dpy, &ev);
 				if (XFilterEvent(&ev, None))
 					continue;
-				if (handler[ev.type])
+				if (handler[ev.type]) {
+					printf("%d Event \n", ev.type);
 					(handler[ev.type])(&ev);
+				}
 			}
 
 			draw();
