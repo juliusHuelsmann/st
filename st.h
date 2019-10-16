@@ -111,8 +111,10 @@ void resettitle(void);
 
 void selclear(void);
 void selinit(void);
-void selstart(int, int, int);
-void selextend(int, int, int, int);
+void selstart(int, int, int, int);
+void xselstart(int, int, int);
+void selextend(int, int, int, int, int);
+void xselextend(int, int, int, int);
 int selected(int, int);
 char *getsel(void);
 

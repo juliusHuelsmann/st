@@ -104,16 +104,18 @@ typedef struct {
 	int mode;
 	int type;
 	int snap;
-	/*
-	 * Selection variables:
-	 * nb – normalized coordinates of the beginning of the selection
-	 * ne – normalized coordinates of the end of the selection
-	 * ob – original coordinates of the beginning of the selection
-	 * oe – original coordinates of the end of the selection
-	 */
+	/// Selection variables: 
+	/// ob – original coordinates of the beginning of the selection
+	/// oe – original coordinates of the end of the selection
+	struct {
+		int x, y, scroll;
+	} ob, oe;
+	/// Selection variables; currently displayed chunk.
+	/// nb – normalized coordinates of the beginning of the selection
+	/// ne – normalized coordinates of the end of the selection
 	struct {
 		int x, y;
-	} nb, ne, ob, oe;
+	} nb, ne;
 
 	int alt;
 } Selection;
@@ -428,8 +430,13 @@ tlinelen(int y)
 	return i;
 }
 
+void 
+xselstart(int col, int row, int snap) {
+	selstart(col, row, term.scr, snap);
+}
+
 void
-selstart(int col, int row, int snap)
+selstart(int col, int row, int scroll, int snap)
 {
 	selclear();
 	sel.mode = SEL_EMPTY;
@@ -438,6 +445,7 @@ selstart(int col, int row, int snap)
 	sel.snap = snap;
 	sel.oe.x = sel.ob.x = col;
 	sel.oe.y = sel.ob.y = row;
+	sel.oe.scroll = sel.ob.scroll = scroll;
 	selnormalize();
 
 	if (sel.snap != 0)
@@ -446,10 +454,13 @@ selstart(int col, int row, int snap)
 }
 
 void
-selextend(int col, int row, int type, int done)
-{
-	int oldey, oldex, oldsby, oldsey, oldtype;
+xselextend(int col, int row, int type, int done) {
+	selextend(col, row, term.scr, type, done);
+}
 
+void
+selextend(int col, int row, int scroll, int type, int done)
+{
 	if (sel.mode == SEL_IDLE)
 		return;
 	if (done && sel.mode == SEL_EMPTY) {
@@ -457,18 +468,22 @@ selextend(int col, int row, int type, int done)
 		return;
 	}
 
-	oldey = sel.oe.y;
-	oldex = sel.oe.x;
-	oldsby = sel.nb.y;
-	oldsey = sel.ne.y;
-	oldtype = sel.type;
+	int oldey = sel.oe.y;
+	int oldex = sel.oe.x;
+	int oldscroll = sel.oe.scroll;
+	int oldsby = sel.nb.y;
+	int oldsey = sel.ne.y;
+	int oldtype = sel.type;
 
 	sel.oe.x = col;
 	sel.oe.y = row;
+	sel.oe.scroll = scroll;
+
 	selnormalize();
 	sel.type = type;
 
-	if (oldey != sel.oe.y || oldex != sel.oe.x || oldtype != sel.type || sel.mode == SEL_EMPTY)
+	if (oldey != sel.oe.y || oldex != sel.oe.x || oldscroll != sel.oe.scroll 
+			|| oldtype != sel.type || sel.mode == SEL_EMPTY)
 		tsetdirt(MIN(sel.nb.y, oldsby), MAX(sel.ne.y, oldsey));
 
 	sel.mode = done ? SEL_IDLE : SEL_READY;
@@ -477,17 +492,21 @@ selextend(int col, int row, int type, int done)
 void
 selnormalize(void)
 {
-	int i;
-
-	if (sel.type == SEL_REGULAR && sel.ob.y != sel.oe.y) {
-		sel.nb.x = sel.ob.y < sel.oe.y ? sel.ob.x : sel.oe.x;
-		sel.ne.x = sel.ob.y < sel.oe.y ? sel.oe.x : sel.ob.x;
+	sel.nb.y = INTERVAL(sel.ob.y + term.scr - sel.ob.scroll, 0, term.bot);
+	sel.ne.y = INTERVAL(sel.oe.y + term.scr - sel.oe.scroll, 0, term.bot);
+	if (sel.type == SEL_REGULAR && sel.nb.y != sel.ne.y) {
+		sel.nb.x = sel.nb.y < sel.ne.y ? sel.ob.x : sel.oe.x;
+		sel.ne.x = sel.nb.y < sel.ne.y ? sel.oe.x : sel.ob.x;
 	} else {
 		sel.nb.x = MIN(sel.ob.x, sel.oe.x);
 		sel.ne.x = MAX(sel.ob.x, sel.oe.x);
 	}
-	sel.nb.y = MIN(sel.ob.y, sel.oe.y);
-	sel.ne.y = MAX(sel.ob.y, sel.oe.y);
+
+	if (sel.nb.y > sel.ne.y) {
+		int32_t const tmp = sel.nb.y;
+		sel.nb.y = sel.ne.y;
+		sel.ne.y = tmp;
+	}
 
 	selsnap(&sel.nb.x, &sel.nb.y, -1);
 	selsnap(&sel.ne.x, &sel.ne.y, +1);
@@ -495,7 +514,7 @@ selnormalize(void)
 	/* expand selection over line breaks */
 	if (sel.type == SEL_RECTANGULAR)
 		return;
-	i = tlinelen(sel.nb.y);
+	int i = tlinelen(sel.nb.y);
 	if (i < sel.nb.x)
 		sel.nb.x = i;
 	if (tlinelen(sel.ne.y) <= sel.ne.x)
@@ -608,11 +627,19 @@ getsel(void)
 	if (sel.ob.x == -1)
 		return NULL;
 
-	bufsize = (term.col+1) * (sel.ne.y-sel.nb.y+1) * UTF_SIZ;
+	int32_t syb = sel.ob.y - sel.ob.scroll + term.scr;
+	int32_t sye = sel.oe.y - sel.oe.scroll + term.scr;
+	if (syb > sye) {
+	  int32_t tmp = sye;
+	  sye = syb;
+          syb = tmp;
+	}
+
+	bufsize = (term.col+1) * (sye - syb + 1) * UTF_SIZ;
 	ptr = str = xmalloc(bufsize);
 
 	/* append every set & selected glyph to the selection */
-	for (y = sel.nb.y; y <= sel.ne.y; y++) {
+	for (y = syb; y <= sye; y++) {
 		if ((linelen = tlinelen(y)) == 0) {
 			*ptr++ = '\n';
 			continue;
@@ -622,8 +649,8 @@ getsel(void)
 			gp = &TLINE(y)[sel.nb.x];
 			lastx = sel.ne.x;
 		} else {
-			gp = &TLINE(y)[sel.nb.y == y ? sel.nb.x : 0];
-			lastx = (sel.ne.y == y) ? sel.ne.x : term.col-1;
+			gp = &TLINE(y)[syb == y ? sel.nb.x : 0];
+			lastx = (sye == y) ? sel.ne.x : term.col-1;
 		}
 		last = &TLINE(y)[MIN(lastx, linelen-1)];
 		while (last >= gp && last->u == ' ')
@@ -1160,6 +1187,7 @@ selscroll(int orig, int n)
 		return;
 
 	if (BETWEEN(sel.ob.y, orig, term.bot) || BETWEEN(sel.oe.y, orig, term.bot)) {
+		sel.oe.scroll = sel.ob.scroll = term.scr;
 		if ((sel.ob.y += n) > term.bot || (sel.oe.y += n) < term.top) {
 			selclear();
 			return;
@@ -1428,12 +1456,14 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 					
 					stateNormalMode.command = defaultNormalMode.command;
 					stateNormalMode.motion = defaultNormalMode.motion;
+                         		xsetsel(getsel());
+					xclipcopy();
 					emptyString(&commandString);
 					emptyString(&searchString);
 					break;
 				case yank:       //< Complete yank operation as in y#amount j
-					//computeMovement(
-					//XXX:
+                                        xsetsel(getsel());
+					xclipcopy();
 					break;
 			}
 			emptyString(&commandString);
@@ -1450,10 +1480,10 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 				if (assign) {
 					enableMode(mode);
 					if (mode == visualLine) {
-						selstart(0, term.c.y, 0);
-						selextend(term.col-1, term.c.y, 0, 0);
+						selstart(0, term.c.y, term.scr, 0);
+						selextend(term.col-1, term.c.y, term.scr, 0, 0);
 					} else {
-						selstart(term.c.x, term.c.y, 0);
+						selstart(term.c.x, term.c.y, term.scr, 0);
 					}
 				} else {
 					selclear();
@@ -1588,6 +1618,9 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 		printSearchString();
 	}
 
+	selextend(term.c.x, term.c.y, term.scr, 0, 0);
+
+	/*
 	int32_t scrDiff = term.scr - stateNormalMode.command.startPosition.yScr;
 
 	int32_t minY = term.c.y;
@@ -1603,12 +1636,13 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 	}
 
 	if (stateNormalMode.command.op == visual) { 
-		selstart(minX, minY, 0);
-		selextend(maxX, maxY, 0, 0);
+		selstart(minX, minY, term.scr, 0);
+		selextend(maxX, maxY, term.scr, 0, 0);
 	} else if (stateNormalMode.command.op == visualLine) {
-		selstart(0, minY, 0);
-		selextend(term.col - 1, maxY, 0, 0);
+		selstart(0, minY, term.scr, 0);
+		selextend(term.col - 1, maxY, term.scr, 0, 0);
 	}
+	*/
 }
 
 void
