@@ -1415,7 +1415,7 @@ void exitCommand() {
 
 	tfulldirt();
 	redraw();
-	drawregion(0, 0, term.col, term.row);
+	//drawregion(0, 0, term.col, term.row);
 }
 
 void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
@@ -1426,6 +1426,7 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 				&& stateNormalMode.motion.search == none
 				&& stateNormalMode.motion.amount == 0) {
 			normalMode(NULL);
+			tfulldirt();
 			redraw(); //XXX: this does not really work.
 		} else {
 			exitCommand();
@@ -1466,33 +1467,33 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 			switch(stateNormalMode.command.op) {
 				case noop:           //< Start yank mode & set #op
 					enableMode(yank);
-					break;
+					selstart(term.c.x, term.c.y, term.scr, 0);
+					emptyString(&commandString);
+					appendCommandString(ksym);
+					return;
 				case visualLine:     //< Complete yank operation
 				case visual:
 					xsetsel(getsel());     //< yank
 					xclipcopy();
 					exitCommand();         //< reset command
-					break;
+					return;
 				case yank:           //< Complete yank operation as in y#amount j
-					xsetsel(getsel());
 					selstart(0, term.c.y, term.scr, 0);
 					uint32_t const origY = term.c.y;
 					for (int32_t i = 0; i < MAX(stateNormalMode.motion.amount, 1) - 1; i ++) moveLine(1);
-					selextend(term.col-1, term.c.y, term.scr, sel.type, 0);
+					selextend(term.col-1, term.c.y, term.scr, SEL_RECTANGULAR, 0);
+					xsetsel(getsel());
 					xclipcopy();
 					term.c.y = origY;
 					exitCommand();
-					break;
+					return;
 			}
-			emptyString(&commandString);
-			appendCommandString(ksym);
 			return;
 		case 'v':                //< Visual Mode: Toggle mode.
 		case 'V':
 			{
 				enum Operation mode = ksym == 'v' ? visual : visualLine;
 				bool assign = stateNormalMode.command.op != mode;
-				stateNormalMode = defaultNormalMode;
 				if (assign) {
 					enableMode(mode);
 					if (mode == visualLine) {
@@ -1502,7 +1503,7 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 						selstart(term.c.x, term.c.y, term.scr, 0);
 					}
 				} else {
-					selclear();
+					exitCommand();
 				}
 			}
 			emptyString(&commandString);
@@ -1520,6 +1521,10 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 		case 'H': term.c.y = 0;            break; //< [numer]H ~ L[number]j is not supported.
 		case 'M': term.c.y = term.bot / 2; break;
 		case 'L': term.c.y = term.bot;     break; //< [numer]L ~ L[number]k is not supported.
+		case 'G': 
+			term.c.x = stateNormalMode.initialPosition.x;    //< a little different from vim, but
+			term.c.y = stateNormalMode.initialPosition.y;    //  in this use case the most useful
+			term.scr = stateNormalMode.initialPosition.yScr; //  translation.
 		case 'l': sign = 1;
 		case 'h':
 		{
@@ -1572,7 +1577,8 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 		default:
 			discard = true;
 		}
-		if (BETWEEN(ksym, 48, 57)) { //< record numbers
+		bool const isNumber = BETWEEN(ksym, 48, 57);
+		if (isNumber) { //< record numbers
 			discard = false;
 			stateNormalMode.motion.amount = 
 			MIN(SHRT_MAX, stateNormalMode.motion.amount * 10 + ksym - 48);
@@ -1584,14 +1590,7 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 			appendCommandString(ksym);
 		}
 		//XXX: record last character sequence somewhere. (dot)
-		// If !yank change the current position, 
-		// else     yank & complete op, but leave the current position unchanged
-		// XXX:
 
-
-	if (false) {
-
-	} else {
 		int diff = 0;
 		if (term.c.y > 0) {
 			if (term.c.y > term.bot) {
@@ -1632,37 +1631,26 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 		tsetdirt(0, term.row-3);
 		printCommandString();
 		printSearchString();
-	}
 
 	if (stateNormalMode.command.op == visual) {
 		selextend(term.c.x, term.c.y, term.scr, sel.type, 0);
 	} else if  (stateNormalMode.command.op == visualLine) {
 		selextend(term.col-1, term.c.y, term.scr, sel.type, 0);
+	} else if (stateNormalMode.command.op == yank) {
+		if (!isNumber && !discard) {
+			// copy
+			selextend(term.c.x, term.c.y, term.scr, sel.mode, 0);
+			xsetsel(getsel());
+			xclipcopy();
+			// Reset the position
+			term.c.x = stateNormalMode.command.startPosition.x;
+			term.c.y = stateNormalMode.command.startPosition.y;
+			term.scr = stateNormalMode.command.startPosition.yScr;
+			//exit command
+			exitCommand();
+		}
+
 	}
-
-	/*
-	int32_t scrDiff = term.scr - stateNormalMode.command.startPosition.yScr;
-
-	int32_t minY = term.c.y;
-	int32_t maxY = INTERVAL(stateNormalMode.command.startPosition.y + scrDiff, 0, term.bot);
-	int32_t minX = term.c.x;
-	int32_t maxX = stateNormalMode.command.startPosition.x;
-
-	if (minY > maxY) {
-		minY = maxY;
-		maxY = term.c.y;
-		minX = maxX;
-		maxX = term.c.x;
-	}
-
-	if (stateNormalMode.command.op == visual) { 
-		selstart(minX, minY, term.scr, 0);
-		selextend(maxX, maxY, term.scr, 0, 0);
-	} else if (stateNormalMode.command.op == visualLine) {
-		selstart(0, minY, term.scr, 0);
-		selextend(term.col - 1, maxY, term.scr, 0, 0);
-	}
-	*/
 }
 
 void
