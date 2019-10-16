@@ -487,6 +487,8 @@ selextend(int col, int row, int scroll, int type, int done)
 		tsetdirt(MIN(sel.nb.y, oldsby), MAX(sel.ne.y, oldsey));
 
 	sel.mode = done ? SEL_IDLE : SEL_READY;
+	if (sel.mode == SEL_IDLE) {
+	}
 }
 
 void
@@ -1271,7 +1273,8 @@ int mod(int a, int b) {
 	return a % b;
 }
 
-void emptyString(struct String* s) { s->index = 0; }
+void
+emptyString(struct String* s) { s->index = 0; }
 
 void appendString(struct String* s, char c) {
 	if (s->index >= s->size) { s->content = (char *) realloc(s->content, s->size += 15); }
@@ -1346,29 +1349,38 @@ void onNormalModeStop() { //XXX breaks if resized
 	term.scr = stateNormalMode.initialPosition.yScr;
 }
 
+void moveLine(int8_t sign) {
+	if (sign == -1) {
+		if (term.c.y-- == 0) {
+			if (++term.scr == HISTSIZE) {
+				term.c.y = term.row - 1;
+				term.scr = 0;
+			} else {
+				term.c.y = 0;
+			}
+		}
+	} else {
+		term.c.x = 0;
+		if (++term.c.y == term.row) {
+			if (term.scr-- == 0) {
+				term.c.y = 0;
+				term.scr = HISTSIZE - 1;
+			} else {
+				term.c.y = term.row - 1;
+			}
+		}
+	}
+}
+
 void moveLetter(int8_t sign) {
 	term.c.x += sign;
 	if (!BETWEEN(term.c.x, 0, term.col-1)) {
 		if (term.c.x < 0) {
 			term.c.x = term.col - 1;
-			if (term.c.y-- == 0) {
-				if (++term.scr == HISTSIZE) {
-					term.c.y = term.row - 1;
-					term.scr = 0;
-				} else {
-					term.c.y = 0;
-				}
-			}
+			moveLine(sign);
 		} else {
 			term.c.x = 0;
-			if (++term.c.y == term.row) {
-				if (term.scr-- == 0) {
-					term.c.y = 0;
-					term.scr = HISTSIZE - 1;
-				} else {
-					term.c.y = term.row - 1;
-				}
-			}
+			moveLine(sign);
 		}
 	}
 }
@@ -1392,6 +1404,20 @@ bool contains (char ksym, char const * values, uint32_t amount) {
 	return false;
 }
 
+
+void exitCommand() {
+	stateNormalMode.command = defaultNormalMode.command;
+	stateNormalMode.motion = defaultNormalMode.motion;
+	selclear();
+
+	emptyString(&commandString);
+	emptyString(&searchString);
+
+	tfulldirt();
+	redraw();
+	drawregion(0, 0, term.col, term.row);
+}
+
 void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 	// [ESC] or [ENTER] abort resp. finish the current operation or 
 	// the Normal Mode if no operation is currently executed.
@@ -1402,15 +1428,8 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 			normalMode(NULL);
 			redraw(); //XXX: this does not really work.
 		} else {
-			stateNormalMode.command = defaultNormalMode.command;
-			stateNormalMode.motion = defaultNormalMode.motion;
+			exitCommand();
 		}
-		selclear();
-		emptyString(&commandString);
-		emptyString(&searchString);
-		tfulldirt();
-		redraw();
-		drawregion(0, 0, term.col, term.row);
 		return;
 	} //< ! (esc || enter)
 	// Search: append to search string & conduct search for best hit, starting at start pos,
@@ -1445,33 +1464,30 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 	switch(ksym) {
 		case 'y': //< Yank mode
 			switch(stateNormalMode.command.op) {
-				case noop:       //< Start yank mode & set #op
+				case noop:           //< Start yank mode & set #op
 					enableMode(yank);
 					break;
-				case visualLine: //< Complete yank operation
+				case visualLine:     //< Complete yank operation
 				case visual:
-					//XXX: Yank the selection!
-					
-					
-					
-					stateNormalMode.command = defaultNormalMode.command;
-					stateNormalMode.motion = defaultNormalMode.motion;
-                         		xsetsel(getsel());
+					xsetsel(getsel());     //< yank
 					xclipcopy();
-					emptyString(&commandString);
-					emptyString(&searchString);
+					exitCommand();         //< reset command
 					break;
-				case yank:       //< Complete yank operation as in y#amount j
-                                        xsetsel(getsel());
+				case yank:           //< Complete yank operation as in y#amount j
+					xsetsel(getsel());
+					selstart(0, term.c.y, term.scr, 0);
+					uint32_t const origY = term.c.y;
+					for (int32_t i = 0; i < MAX(stateNormalMode.motion.amount, 1) - 1; i ++) moveLine(1);
+					selextend(term.col-1, term.c.y, term.scr, sel.type, 0);
 					xclipcopy();
+					term.c.y = origY;
+					exitCommand();
 					break;
 			}
 			emptyString(&commandString);
 			appendCommandString(ksym);
 			return;
-
-			// Visual Mode: Toggle mode.
-		case 'v':
+		case 'v':                //< Visual Mode: Toggle mode.
 		case 'V':
 			{
 				enum Operation mode = ksym == 'v' ? visual : visualLine;
@@ -1481,7 +1497,7 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 					enableMode(mode);
 					if (mode == visualLine) {
 						selstart(0, term.c.y, term.scr, 0);
-						selextend(term.col-1, term.c.y, term.scr, 0, 0);
+						selextend(term.col-1, term.c.y, term.scr, SEL_RECTANGULAR, 0);
 					} else {
 						selstart(term.c.x, term.c.y, term.scr, 0);
 					}
@@ -1588,7 +1604,7 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 				term.c.y = 0;
 			}
 		}
-		printf("term.c.y= %d\n", term.c.y);
+		//printf("term.c.y= %d\n", term.c.y);
 
 		// if the #histi has been crossed, jA
 		int newScr = term.scr + diff;
@@ -1606,7 +1622,7 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 		//newScr     = mod(newScr, HISTSIZE); //INTERVAL(newScr, 0, HISTSIZE);
 		int n      = term.scr - newScr;
 		term.scr = newScr;
-		printf("%d, %d\n", term.c.y, newScr);
+		//printf("%d, %d\n", term.c.y, newScr);
 
 		// debug: output the line 
 		//for(int j = 0; j < term.col -1; j++) { printf("%c", TLINE(term.c.y)[j].u); } printf("\n");
@@ -1618,7 +1634,11 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 		printSearchString();
 	}
 
-	selextend(term.c.x, term.c.y, term.scr, 0, 0);
+	if (stateNormalMode.command.op == visual) {
+		selextend(term.c.x, term.c.y, term.scr, sel.type, 0);
+	} else if  (stateNormalMode.command.op == visualLine) {
+		selextend(term.col-1, term.c.y, term.scr, sel.type, 0);
+	}
 
 	/*
 	int32_t scrDiff = term.scr - stateNormalMode.command.startPosition.yScr;

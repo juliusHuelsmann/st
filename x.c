@@ -1941,7 +1941,6 @@ run(void)
 				if (XFilterEvent(&ev, None))
 					continue;
 				if (handler[ev.type]) {
-					printf("%d Event \n", ev.type);
 					(handler[ev.type])(&ev);
 				}
 			}
