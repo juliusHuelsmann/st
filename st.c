@@ -1133,7 +1133,6 @@ tscrolldown(int orig, int n, int copyhist)
 
 	if (copyhist) {
 		term.histi = (term.histi - 1 + HISTSIZE) % HISTSIZE;
-		printf("%d histi changed!", term.histi);
 		temp = term.hist[term.histi];
 		term.hist[term.histi] = term.line[term.bot];
 		term.line[term.bot] = temp;
@@ -1161,7 +1160,6 @@ tscrollup(int orig, int n, int copyhist)
 
 	if (copyhist) {
 		term.histi = (term.histi + 1) % HISTSIZE;
-		printf("%d histi changed!", term.histi);
 		temp = term.hist[term.histi];
 		term.hist[term.histi] = term.line[orig];
 		term.line[orig] = temp;
