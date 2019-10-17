@@ -1347,7 +1347,6 @@ void onNormalModeStart() {
 	stateNormalMode.initialPosition.x = term.c.x;
 	stateNormalMode.initialPosition.y = term.c.y;
 	stateNormalMode.initialPosition.yScr = term.scr;
-	printf("start%d,%d, %d\n", term.c.x, term.c.y, term.scr);
 }
 
 void onNormalModeStop() { //XXX breaks if resized
