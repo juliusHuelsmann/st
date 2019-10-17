@@ -1482,7 +1482,8 @@ void gotoStringAndHighlight(int8_t sign) {
 	                                      //  is painted separately.
 }
 
-void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
+void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace) {
+
 	// [ESC] or [ENTER] abort resp. finish the current operation or 
 	// the Normal Mode if no operation is currently executed.
 	if (esc || enter) {
@@ -1525,8 +1526,10 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 			term.c.y = stateNormalMode.motion.searchPosition.y;
 			term.scr = stateNormalMode.motion.searchPosition.yScr;
 		} else {
-			appendCommandString(ksym);
-			appendSearchString(ksym);
+			for (uint32_t i = 0; i < len; i++) {
+				appendCommandString(ksym[i]);
+				appendSearchString(ksym[i]);
+			}
 			// it is now `harder` to find the string, henceall positions that did not match until now
 			// will not match the longer string. Thus the start position is the current position
 		}
@@ -1537,15 +1540,17 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 		printSearchString();
 		return;
 	}
+
+	if (len == 0) { return; }
 	// V / v or y take precedence over movement commands.
-	switch(ksym) {
+	switch(ksym[0]) {
 		case 'y': //< Yank mode
 			switch(stateNormalMode.command.op) {
 				case noop:           //< Start yank mode & set #op
 					enableMode(yank);
 					selstart(term.c.x, term.c.y, term.scr, 0);
 					emptyString(&commandString);
-					appendCommandString(ksym);
+					appendCommandString(ksym[0]);
 					return;
 				case visualLine:     //< Complete yank operation
 				case visual:
@@ -1568,7 +1573,7 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 		case 'v':                //< Visual Mode: Toggle mode.
 		case 'V':
 			{
-				enum Operation mode = ksym == 'v' ? visual : visualLine;
+				enum Operation mode = ksym[0] == 'v' ? visual : visualLine;
 				bool assign = stateNormalMode.command.op != mode;
 				if (assign) {
 					enableMode(mode);
@@ -1583,13 +1588,13 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 				}
 			}
 			emptyString(&commandString);
-			appendCommandString(ksym);
+			appendCommandString(ksym[0]);
 			return;
 	}
 	// Perform the movement.
 	int32_t sign = -1;    //< whehter a command goes 'forward' (1) or 'backward' (-1)
 	bool discard = false; //< discard input, as it does not have a meaning.
-	switch(ksym) {
+	switch(ksym[0]) {
 		case 'j': sign = 1;
 		case 'k': 
 			 term.c.y += sign * MAX(stateNormalMode.motion.amount, 1);
@@ -1619,8 +1624,8 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 		case 'B':
 		case 'b':
 		{
-			bool const startSpaceIsSeparator = !(ksym == 'w' || ksym == 'W');
-			bool const capital = ksym <= 90; //< defines the word separators to use 
+			bool const startSpaceIsSeparator = !(ksym[0] == 'w' || ksym[0] == 'W');
+			bool const capital = ksym[0] <= 90; //< defines the word separators to use 
 			char const * const wDelim = capital ? wordDelimLarge : wordDelimSmall; 
 			uint32_t const wDelimLen =  strlen(wDelim);
 			bool const performOffset = startSpaceIsSeparator; //< start & end with offset.
@@ -1665,17 +1670,17 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 		default:
 			discard = true;
 		}
-		bool const isNumber = BETWEEN(ksym, 48, 57);
+		bool const isNumber = len == 1 && BETWEEN(ksym[0], 48, 57);
 		if (isNumber) { //< record numbers
 			discard = false;
 			stateNormalMode.motion.amount = 
-			MIN(SHRT_MAX, stateNormalMode.motion.amount * 10 + ksym - 48);
+			MIN(SHRT_MAX, stateNormalMode.motion.amount * 10 + ksym[0] - 48);
 		} else if (!discard) {
 			stateNormalMode.motion.amount = 0; 
 		}
 
 		if (!discard) {
-			appendCommandString(ksym);
+			appendCommandString(ksym[0]);
 		}
 		//XXX: record last character sequence somewhere. (dot)
 

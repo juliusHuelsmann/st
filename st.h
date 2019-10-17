@@ -89,7 +89,7 @@ void externalpipe(const Arg *);
 int highlighted(int, int);
 void kscrolldown(const Arg *);
 void kscrollup(const Arg *);
-void kpressNormalMode(char symbol, bool esc, bool enter, bool bckspace);
+void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace);
 void normalMode(Arg const *);
 void onNormalModeStart();
 void onNormalModeStop();

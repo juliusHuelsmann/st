@@ -1803,7 +1803,8 @@ kpress(XEvent *ev)
 
 	len = XmbLookupString(xw.xic, e, buf, sizeof buf, &ksym, &status);
 	if (IS_SET(MODE_NORMAL)) {
-		kpressNormalMode(ksym, ksym == XK_Escape, ksym == XK_Return, ksym == XK_BackSpace);
+		kpressNormalMode(buf, strlen(buf), 
+				ksym == XK_Escape, ksym == XK_Return, ksym == XK_BackSpace);
 		return;
 	}
 
