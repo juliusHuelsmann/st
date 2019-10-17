@@ -1245,6 +1245,7 @@ struct NormalModeState {
 			backward,
 		} search;
 		struct Position searchPosition;
+		bool finished;
 	} motion;
 } stateNormalMode;
 
@@ -1261,10 +1262,9 @@ int
 highlighted(int x, int y)
 {
 	for (uint32_t i = 0; i < highlights.index; i+=2) {
-		uint32_t sx = ((uint32_t*) highlights.content)[i];
-		uint32_t sy = ((uint32_t*) highlights.content)[i+1];
+		int32_t sx = ((uint32_t*) highlights.content)[i];
+		int32_t sy = ((uint32_t*) highlights.content)[i+1];
 		if (y == sy && x >= sx && x < sx + searchString.index) { 
-			printf("%d %d found \n", sx, sy);
 			return true; 
 		}
 	}
@@ -1334,7 +1334,7 @@ void appendSearchString(char c) {
 }
 
 /// Default state if no operation is performed.
-struct NormalModeState defaultNormalMode = {{0,0,0}, {noop, {0, 0, 0}}, {0, none, {0, 0, 0}}};
+struct NormalModeState defaultNormalMode = {{0,0,0}, {noop, {0, 0, 0}}, {0, none, {0, 0, 0}, false}};
 
 void enableMode(enum Operation o) {
 	stateNormalMode.command.op = o;
@@ -1347,6 +1347,7 @@ void onNormalModeStart() {
 	stateNormalMode.initialPosition.x = term.c.x;
 	stateNormalMode.initialPosition.y = term.c.y;
 	stateNormalMode.initialPosition.yScr = term.scr;
+	printf("start%d,%d, %d\n", term.c.x, term.c.y, term.scr);
 }
 
 void onNormalModeStop() { //XXX breaks if resized
@@ -1410,6 +1411,78 @@ void exitCommand() {
 	//drawregion(0, 0, term.col, term.row);
 }
 
+/// Go to next occurrence of string relative to the current location
+/// conduct search, starting at start pos
+bool 
+gotoString(int8_t sign) {
+	uint32_t findIndex = 0;
+	uint32_t const maxIteration = (HISTSIZE + term.row) * term.col;  //< one complete traversal.
+	for (uint32_t cIteration = 0; findIndex < searchString.index 
+			&& cIteration ++ < maxIteration; moveLetter(sign)) {
+		char const searchChar = searchString.content[sign == 1 
+			? findIndex : searchString.index - 1 - findIndex];
+		if (TLINE(term.c.y)[term.c.x].u == searchChar) findIndex++;
+		else findIndex = 0;
+	}
+	bool const found = findIndex == searchString.index;
+	if (found) {
+		for (uint32_t i = 0; i < searchString.index; i++) { moveLetter(-sign); }
+	}
+	return found;
+}
+
+/// Find the next occurrence of a word
+bool
+gotoNextString(int8_t sign) {
+	moveLetter(sign);
+	return gotoString(sign);
+}
+
+/// Highlight all found strings on the current screen.
+void 
+highlightStringOnScreen() {
+	if (searchString.index == 0) { return; }
+	uint32_t findIndex = 0;
+	uint32_t xStart, yStart;
+	for (uint32_t y = 0; y < term.row; y++) {
+		for (uint32_t x = 0; x < term.col; x++) {
+			if (TLINE(y)[x].u == searchString.content[findIndex]) {
+				if (findIndex++ == 0) { 
+					xStart = x;
+					yStart = y;
+				} else if (findIndex == searchString.index) {
+					// mark selected
+					if (highlights.index >= highlights.size) { 
+						highlights.content = (char *) realloc(highlights.content, 
+								4*(highlights.size += 10)); 
+					}
+					((uint32_t*) highlights.content)[highlights.index++] = xStart;
+					((uint32_t*) highlights.content)[highlights.index++] = yStart;
+					findIndex = 0;
+					term.dirty[yStart] = 1;
+				} 
+			} else {
+				findIndex = 0;
+			}
+		}
+	}
+}
+
+void gotoStringAndHighlight(int8_t sign) {
+	bool const found = gotoString(sign);  //< find the next string to the current position
+	emptyString(&highlights);             //< remove previous highlights
+	if (found) {                          //< apply new highlights if found
+		//if (sign == -1) { moveLetter(-1); }
+		highlightStringOnScreen(sign);      
+	} else {                              //< go to the position where the search started.
+		term.c.x = stateNormalMode.motion.searchPosition.x;    
+		term.c.y = stateNormalMode.motion.searchPosition.y;
+		term.scr = stateNormalMode.motion.searchPosition.yScr;
+	}
+	tsetdirt(0, term.row-3);              //< repaint everything except for the status bar, which
+	                                      //  is painted separately.
+}
+
 void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 	// [ESC] or [ENTER] abort resp. finish the current operation or 
 	// the Normal Mode if no operation is currently executed.
@@ -1421,15 +1494,19 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 			tfulldirt();
 			redraw();
 		} else {
+			if (enter && stateNormalMode.motion.search != none && searchString.index > 0) {
+				stateNormalMode.motion.finished = true;
+				return;
+			}
 			exitCommand();
 		}
 		return;
 	} //< ! (esc || enter)
 	// Search: append to search string & conduct search for best hit, starting at start pos,
 	//         highlighting all other occurrences on the current page if one is found.
-	if (stateNormalMode.motion.search != none) {  
-		struct Position searchStartPosition;
-		struct Position searchStopPosition = stateNormalMode.motion.searchPosition;
+	if (stateNormalMode.motion.search != none && !stateNormalMode.motion.finished) {
+		int8_t const sign = stateNormalMode.motion.search == forward ? 1 : -1;
+		// Apply start position.
 		if (backspace) {
 			if (commandString.index > 0 && searchString.index > 0) {
 				commandString.index--;
@@ -1437,57 +1514,28 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 				printCommandString();
 				printSearchString();
 			}
-			searchStartPosition = stateNormalMode.motion.searchPosition;
-		} else { 
+			if (commandString.index == 0 || searchString.index == 0) {
+
+				stateNormalMode.motion =
+					defaultNormalMode
+					.motion;       //< if typed once more than there are
+				selclear();      //  letters, the search motion is
+				return;          //  terminated
+			}
+			term.c.x = stateNormalMode.motion.searchPosition.x;
+			term.c.y = stateNormalMode.motion.searchPosition.y;
+			term.scr = stateNormalMode.motion.searchPosition.yScr;
+		} else {
 			appendCommandString(ksym);
 			appendSearchString(ksym);
-			searchStartPosition.x = term.c.x;   //< it is now `harder` to find the string, hence
-			searchStartPosition.y = term.c.y;   //  all positions that did not match until now
-			searchStartPosition.yScr = term.scr;//  will not match the longer string.
+			// it is now `harder` to find the string, henceall positions that did not match until now
+			// will not match the longer string. Thus the start position is the current position
 		}
-		// Apply start position.
-		term.c.x = searchStartPosition.x;
-		term.c.y = searchStartPosition.y;
-		term.scr = searchStartPosition.yScr;
-		// conduct search, starting at start pos
-		uint32_t findIndex = 0;
-		uint32_t const maxIteration = (HISTSIZE + term.row) * term.col;  //< one complete traversal.
-		int8_t const sign = stateNormalMode.motion.search == forward ? 1 : -1;
-		for (uint32_t cIteration = 0; findIndex < searchString.index 
-				&& cIteration ++ < maxIteration; moveLetter(sign)) {
-			if (TLINE(term.c.y)[term.c.x].u == searchString.content[findIndex]) findIndex++;
-			else findIndex = 0;
-		}
-		// highlight all other on term, starting at last found position.
-		bool const found = findIndex == searchString.index;
-		if (found) {
-			for (uint32_t i = 0; i < searchString.index; i++) { moveLetter(-sign); }
-			findIndex = 0;
-			emptyString(&highlights);
-			for (uint32_t y = 0; y < term.row; y++) {
-				for (uint32_t x = 0; x < term.col; x++) {
-					if (TLINE(y)[x].u == searchString.content[findIndex]) {
-						if (++findIndex == searchString.index) {
-							// mark selected
-							if (highlights.index >= highlights.size) { 
-								highlights.content = (char *) realloc(highlights.content, 
-										4*(highlights.size += 10)); 
-							}
-							((uint32_t*) highlights.content)[highlights.index++] = x + 1 - findIndex;
-							((uint32_t*) highlights.content)[highlights.index++] = y;
-							term.dirty[y] = 1;
-							printf("%d %d marked \n", x, y);
-							findIndex = 0;
-						}
-						xdrawline(TLINE(y), x, y, x);
-					} else {
-						findIndex = 0;
-					}
-				}
-			}
-		}
-		redraw();
-
+		if (sign == -1) { moveLetter(1); }
+		gotoStringAndHighlight(sign); //< go to the next occurrence of the string and highlight
+		                              //  all occurrences currently on screen
+		printCommandString();
+		printSearchString();
 		return;
 	}
 	// V / v or y take precedence over movement commands.
@@ -1598,10 +1646,22 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 		}
 		case '/': sign = 1;
 		case '?': 
+			emptyString(&searchString);
 			stateNormalMode.motion.search = sign == 1 ? forward : backward; 
 			stateNormalMode.motion.searchPosition.x = term.c.x;
 			stateNormalMode.motion.searchPosition.y = term.c.y;
 			stateNormalMode.motion.searchPosition.yScr = term.scr;
+			stateNormalMode.motion.finished = false;
+			break;
+		case 'n': sign = 1;
+		case 'N': 
+			if (stateNormalMode.motion.search == none) {
+				discard = true;
+			} else {
+				if (stateNormalMode.motion.search == backward) { sign *= -1; }
+				moveLetter(sign);
+				gotoStringAndHighlight(sign);
+			}
 			break;
 		default:
 			discard = true;
@@ -1632,31 +1692,16 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 				term.c.y = 0;
 			}
 		}
-		//printf("term.c.y= %d\n", term.c.y);
 
-		// if the #histi has been crossed, jA
-		int newScr = term.scr + diff;
-		if (newScr < 0) {
-		//if (newScr <= term.histi  && term.scr > term.histi) {
-			term.c.y = 0;
-		//} else if (newScr >= term.histi && term.scr < term.histi) {
-		} else if (newScr >= HISTSIZE) {
-			term.c.y = term.bot;
-		} 
-		newScr = mod(newScr, HISTSIZE);
+		int const _newScr = term.scr + diff;
+		term.c.y = _newScr < 0 ? 0 : (_newScr >= HISTSIZE ? term.bot : term.c.y);
+		term.scr = mod(_newScr, HISTSIZE);
+
+		if (highlights.index > 0) {
+			emptyString(&highlights);
+			highlightStringOnScreen();
+		}
 		
-		//term.c.y   = INTERVAL(y, 0, term.bot);
-		//int newScr = -INTERVAL_DIFF(term.scr-y, 0, term.bot);
-		//newScr     = mod(newScr, HISTSIZE); //INTERVAL(newScr, 0, HISTSIZE);
-		int n      = term.scr - newScr;
-		term.scr = newScr;
-		//printf("%d, %d\n", term.c.y, newScr);
-
-		// debug: output the line 
-		//for(int j = 0; j < term.col -1; j++) { printf("%c", TLINE(term.c.y)[j].u); } printf("\n");
-
-		//selscroll(0, n);
-		//tfulldirt();    //< all lines are dirty now.
 		tsetdirt(0, term.row-3);
 		printCommandString();
 		printSearchString();
@@ -1678,7 +1723,6 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 			//exit command
 			exitCommand();
 		}
-
 	}
 }
 
