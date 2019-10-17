@@ -539,13 +539,6 @@ selected(int x, int y)
 	    && (y != sel.ne.y || x <= sel.ne.x);
 }
 
-int 
-highlighted(int x, int y)
-{
-	return 0;
-
-}
-
 void
 selsnap(int *x, int *y, int direction)
 {
@@ -1262,6 +1255,21 @@ struct String {
 	char* content;
 } searchString = {0, 0, NULL};
 struct String commandString = {0, 0, NULL};
+struct String highlights = {0, 0, NULL};
+
+int 
+highlighted(int x, int y)
+{
+	for (uint32_t i = 0; i < highlights.index; i+=2) {
+		uint32_t sx = ((uint32_t*) highlights.content)[i];
+		uint32_t sy = ((uint32_t*) highlights.content)[i+1];
+		if (y == sy && x >= sx && x < sx + searchString.index) { 
+			printf("%d %d found \n", sx, sy);
+			return true; 
+		}
+	}
+	return false;
+}
 
 
 int mod(int a, int b) {
@@ -1383,20 +1391,6 @@ void moveLetter(int8_t sign) {
 	}
 }
 
-/// Find the next occurrence of
-void toNext(struct String *string, struct Position *stopPosition) {
-
-}
-
-/// XXX: i don't actually know how to do this, because I think, that #toNext will shift the screen, 
-///      which  -- in turn -- requires a repaint, which then will override the hightlighted
-///      sections.
-// Idea: maybe place this into the drawing routine!
-void highlightOnScreen(struct String * string, uint16_t startY, uint16_t stopY) {
-
-}
-
-
 bool contains (char ksym, char const * values, uint32_t amount) {
 	for (uint32_t i = 0; i < amount; i++) { if (ksym == values[i]) { return true; } }
 	return false;
@@ -1425,7 +1419,7 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 				&& stateNormalMode.motion.amount == 0) {
 			normalMode(NULL);
 			tfulldirt();
-			redraw(); //XXX: this does not really work.
+			redraw();
 		} else {
 			exitCommand();
 		}
@@ -1452,10 +1446,47 @@ void kpressNormalMode(char ksym, bool esc, bool enter, bool backspace) {
 			searchStartPosition.yScr = term.scr;//  will not match the longer string.
 		}
 		// Apply start position.
-		
+		term.c.x = searchStartPosition.x;
+		term.c.y = searchStartPosition.y;
+		term.scr = searchStartPosition.yScr;
 		// conduct search, starting at start pos
-		
+		uint32_t findIndex = 0;
+		uint32_t const maxIteration = (HISTSIZE + term.row) * term.col;  //< one complete traversal.
+		int8_t const sign = stateNormalMode.motion.search == forward ? 1 : -1;
+		for (uint32_t cIteration = 0; findIndex < searchString.index 
+				&& cIteration ++ < maxIteration; moveLetter(sign)) {
+			if (TLINE(term.c.y)[term.c.x].u == searchString.content[findIndex]) findIndex++;
+			else findIndex = 0;
+		}
 		// highlight all other on term, starting at last found position.
+		bool const found = findIndex == searchString.index;
+		if (found) {
+			for (uint32_t i = 0; i < searchString.index; i++) { moveLetter(-sign); }
+			findIndex = 0;
+			emptyString(&highlights);
+			for (uint32_t y = 0; y < term.row; y++) {
+				for (uint32_t x = 0; x < term.col; x++) {
+					if (TLINE(y)[x].u == searchString.content[findIndex]) {
+						if (++findIndex == searchString.index) {
+							// mark selected
+							if (highlights.index >= highlights.size) { 
+								highlights.content = (char *) realloc(highlights.content, 
+										4*(highlights.size += 10)); 
+							}
+							((uint32_t*) highlights.content)[highlights.index++] = x + 1 - findIndex;
+							((uint32_t*) highlights.content)[highlights.index++] = y;
+							term.dirty[y] = 1;
+							printf("%d %d marked \n", x, y);
+							findIndex = 0;
+						}
+						xdrawline(TLINE(y), x, y, x);
+					} else {
+						findIndex = 0;
+					}
+				}
+			}
+		}
+		redraw();
 
 		return;
 	}

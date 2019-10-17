@@ -1602,8 +1602,12 @@ xdrawline(Line line, int x1, int y1, int x2)
 			continue;
 		if (selected(x, y1))
 			new.mode ^= ATTR_REVERSE;
-		if (highlighted(x, y1))
+		if (highlighted(x, y1)) {
 			new.mode ^= ATTR_UNDERLINE;
+			new.mode ^= ATTR_STRUCK;
+			new.mode ^= ATTR_ITALIC;
+			
+		}
 		if (i > 0 && ATTRCMP(base, new)) {
 			xdrawglyphfontspecs(specs, base, i, ox, y1);
 			specs += i;
