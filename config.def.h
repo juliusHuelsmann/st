@@ -154,6 +154,9 @@ static unsigned int mousebg = 0;
  * doesn't match the ones requested.
  */
 static unsigned int defaultattr = 11;
+/// Highlight color
+static unsigned int highlightBg = 1; //8;
+static unsigned int highlightFg = 15;
 
 
 /// Xresources preferences to load at startup

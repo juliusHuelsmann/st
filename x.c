@@ -1348,6 +1348,11 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
 		base.fg = defaultattr;
 	}
 
+	if (base.mode & ATTR_HIGHLIGHT) {
+		base.bg = highlightBg;
+		base.fg = highlightFg;
+	}
+
 	if (IS_TRUECOL(base.fg)) {
 		colfg.alpha = 0xffff;
 		colfg.red = TRUERED(base.fg);
@@ -1603,10 +1608,7 @@ xdrawline(Line line, int x1, int y1, int x2)
 		if (selected(x, y1))
 			new.mode ^= ATTR_REVERSE;
 		if (highlighted(x, y1)) {
-			new.mode ^= ATTR_UNDERLINE;
-			new.mode ^= ATTR_STRUCK;
-			new.mode ^= ATTR_ITALIC;
-			
+			new.mode ^= ATTR_HIGHLIGHT;
 		}
 		if (i > 0 && ATTRCMP(base, new)) {
 			xdrawglyphfontspecs(specs, base, i, ox, y1);
