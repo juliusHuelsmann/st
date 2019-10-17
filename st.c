@@ -37,8 +37,8 @@
 #define ESC_ARG_SIZ   16
 #define STR_BUF_SIZ   ESC_BUF_SIZ
 #define STR_ARG_SIZ   ESC_ARG_SIZ
-//#define HISTSIZE      2000
-#define HISTSIZE      100
+//#define HISTSIZE      100
+#define HISTSIZE      2000
 
 /* macros */
 #define IS_SET(flag)		((term.mode & (flag)) != 0)
@@ -1258,6 +1258,13 @@ struct String {
 struct String commandString = {0, 0, NULL};
 struct String highlights = {0, 0, NULL};
 
+
+int 
+currentLine(int x, int y) 
+{
+	if (x == term.c.x || y == term.c.y) { return true; }
+}
+
 int 
 highlighted(int x, int y)
 {
@@ -1343,13 +1350,14 @@ void enableMode(enum Operation o) {
 	stateNormalMode.command.startPosition.yScr = term.scr;
 }
 
+bool normalModeEnabled = false;
+
 void onNormalModeStart() {
-	stateNormalMode.initialPosition.x = term.c.x;
-	stateNormalMode.initialPosition.y = term.c.y;
-	stateNormalMode.initialPosition.yScr = term.scr;
+	normalModeEnabled = true;
 }
 
 void onNormalModeStop() { //XXX breaks if resized
+	normalModeEnabled = false;
 	term.c.x = stateNormalMode.initialPosition.x;
 	term.c.y = stateNormalMode.initialPosition.y;
 	term.scr = stateNormalMode.initialPosition.yScr;
@@ -1662,9 +1670,12 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 			if (stateNormalMode.motion.search == none) {
 				discard = true;
 			} else {
-				if (stateNormalMode.motion.search == backward) { sign *= -1; }
-				moveLetter(sign);
-				gotoStringAndHighlight(sign);
+				int32_t amount = MAX(stateNormalMode.motion.amount, 1);
+				for (; amount > 0; amount--) {
+					if (stateNormalMode.motion.search == backward) { sign *= -1; }
+					moveLetter(sign);
+					gotoStringAndHighlight(sign);
+				}
 			}
 			break;
 		default:
@@ -1782,6 +1793,10 @@ tmoveto(int x, int y)
 	term.c.state &= ~CURSOR_WRAPNEXT;
 	term.c.x = LIMIT(x, 0, term.col-1);
 	term.c.y = LIMIT(y, miny, maxy);
+	// Set the last position in order to restore after normal mode exits.
+	stateNormalMode.initialPosition.x = term.c.x;
+	stateNormalMode.initialPosition.y = term.c.y;
+	stateNormalMode.initialPosition.yScr = term.scr;
 }
 
 void

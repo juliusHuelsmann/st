@@ -37,6 +37,7 @@ enum glyph_attribute {
 	ATTR_WIDE       = 1 << 9,
 	ATTR_WDUMMY     = 1 << 10,
 	ATTR_HIGHLIGHT  = 1 << 11 | ATTR_UNDERLINE,
+	ATTR_CURRENT    = 1 << 12,
 	ATTR_BOLD_FAINT = ATTR_BOLD | ATTR_FAINT,
 };
 
@@ -87,6 +88,7 @@ void draw(void);
 
 void externalpipe(const Arg *);
 int highlighted(int, int);
+int currentLine(int, int);
 void kscrolldown(const Arg *);
 void kscrollup(const Arg *);
 void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace);

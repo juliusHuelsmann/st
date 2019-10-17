@@ -1351,6 +1351,9 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
 	if (base.mode & ATTR_HIGHLIGHT) {
 		base.bg = highlightBg;
 		base.fg = highlightFg;
+	} else if ((base.mode & ATTR_CURRENT) && (win.mode & MODE_NORMAL)) {
+		base.bg = currentBg;
+		base.fg = currentFg;
 	}
 
 	if (IS_TRUECOL(base.fg)) {
@@ -1609,6 +1612,8 @@ xdrawline(Line line, int x1, int y1, int x2)
 			new.mode ^= ATTR_REVERSE;
 		if (highlighted(x, y1)) {
 			new.mode ^= ATTR_HIGHLIGHT;
+		} else if (currentLine(x, y1)) {
+			new.mode ^= ATTR_CURRENT;
 		}
 		if (i > 0 && ATTRCMP(base, new)) {
 			xdrawglyphfontspecs(specs, base, i, ox, y1);
