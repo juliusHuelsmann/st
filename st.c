@@ -1411,7 +1411,6 @@ void exitCommand() {
 	selclear();
 
 	emptyString(&commandString);
-	emptyString(&searchString);
 
 	tfulldirt();
 	redraw();
@@ -1498,6 +1497,7 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 		if (stateNormalMode.command.op == noop 
 				&& stateNormalMode.motion.search == none
 				&& stateNormalMode.motion.amount == 0) {
+			emptyString(&searchString);
 			normalMode(NULL);
 			tfulldirt();
 			redraw();
@@ -1668,8 +1668,10 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 		case 'n': sign = 1;
 		case 'N': 
 			if (stateNormalMode.motion.search == none) {
-				discard = true;
-			} else {
+				stateNormalMode.motion.search = forward;
+				stateNormalMode.motion.finished = true;
+			} 
+			{
 				int32_t amount = MAX(stateNormalMode.motion.amount, 1);
 				for (; amount > 0; amount--) {
 					if (stateNormalMode.motion.search == backward) { sign *= -1; }
