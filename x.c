@@ -1488,9 +1488,9 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	Color drawcol;
 
 	/* remove the old cursor */
-	if (selected(ox, oy))
-		og.mode ^= ATTR_REVERSE;
-	xdrawglyph(og, ox, oy);
+	if (selected(ox, oy)) og.mode ^= ATTR_REVERSE;
+  if (currentLine(ox, oy)) { og.mode = ATTR_CURRENT; }
+  xdrawglyph(og, ox, oy);
 
 	if (IS_SET(MODE_HIDE))
 		return;
@@ -1499,6 +1499,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	 * Select the right color for the right mode.
 	 */
 	g.mode &= ATTR_BOLD|ATTR_ITALIC|ATTR_UNDERLINE|ATTR_STRUCK|ATTR_WIDE;
+
 
 	if (IS_SET(MODE_REVERSE)) {
 		g.mode |= ATTR_REVERSE;
@@ -1520,6 +1521,11 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 		}
 		drawcol = dc.col[g.bg];
 	}
+  
+	if ((g.mode & ATTR_CURRENT) && (win.mode & MODE_NORMAL)) {
+  g.bg = currentBg;
+  g.fg = currentFg;
+	} 
 
 	/* draw the new one */
 	if (IS_SET(MODE_FOCUSED)) {
@@ -1612,7 +1618,8 @@ xdrawline(Line line, int x1, int y1, int x2)
 			new.mode ^= ATTR_REVERSE;
 		if (highlighted(x, y1)) {
 			new.mode ^= ATTR_HIGHLIGHT;
-		} else if (currentLine(x, y1)) {
+		} 
+    if (currentLine(x, y1)) {
 			new.mode ^= ATTR_CURRENT;
 		}
 		if (i > 0 && ATTRCMP(base, new)) {

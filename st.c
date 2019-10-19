@@ -1262,7 +1262,7 @@ struct String highlights = {0, 0, NULL};
 int 
 currentLine(int x, int y) 
 {
-	if (x == term.c.x || y == term.c.y) { return true; }
+	return (x == term.c.x || y == term.c.y);
 }
 
 int 
