@@ -1473,7 +1473,6 @@ highlightStringOnScreen() {
 			}
 		}
 	}
-  printf("highlights : %d\n", highlights.index);
 }
 
 void gotoStringAndHighlight(int8_t sign) {

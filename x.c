@@ -1489,8 +1489,9 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 
 	/* remove the old cursor */
 	if (selected(ox, oy)) og.mode ^= ATTR_REVERSE;
-  if (currentLine(ox, oy)) { og.mode = ATTR_CURRENT; }
-  xdrawglyph(og, ox, oy);
+	if (highlighted(ox, oy)) { og.mode ^= ATTR_HIGHLIGHT; }
+	if (currentLine(ox, oy)) { og.mode ^= ATTR_CURRENT; }
+	xdrawglyph(og, ox, oy);
 
 	if (IS_SET(MODE_HIDE))
 		return;
