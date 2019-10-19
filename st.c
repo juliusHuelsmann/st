@@ -1624,7 +1624,7 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 			break;
 		}
 		case '0': term.c.x = 0;        break;
-		case '$': term.c.x = term.col; break;
+		case '$': term.c.x = term.col-1; break;
 		case 'w':
 		case 'W': 
 		case 'e': 
@@ -1671,13 +1671,10 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 				stateNormalMode.motion.search = forward;
 				stateNormalMode.motion.finished = true;
 			} 
-			{
-				int32_t amount = MAX(stateNormalMode.motion.amount, 1);
-				for (; amount > 0; amount--) {
-					if (stateNormalMode.motion.search == backward) { sign *= -1; }
-					moveLetter(sign);
-					gotoStringAndHighlight(sign);
-				}
+			for (int32_t amount = MAX(stateNormalMode.motion.amount, 1); amount > 0; amount--) {
+				if (stateNormalMode.motion.search == backward) { sign *= -1; }
+				moveLetter(sign);
+				gotoStringAndHighlight(sign);
 			}
 			break;
 		default:
