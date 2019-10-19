@@ -1456,7 +1456,8 @@ highlightStringOnScreen() {
 				if (findIndex++ == 0) { 
 					xStart = x;
 					yStart = y;
-				} else if (findIndex == searchString.index) {
+				} 
+        if (findIndex == searchString.index) {
 					// mark selected
 					if (highlights.index >= highlights.size) { 
 						highlights.content = (char *) realloc(highlights.content, 
@@ -1472,6 +1473,7 @@ highlightStringOnScreen() {
 			}
 		}
 	}
+  printf("highlights : %d\n", highlights.index);
 }
 
 void gotoStringAndHighlight(int8_t sign) {
