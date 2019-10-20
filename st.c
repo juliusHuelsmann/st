@@ -1522,9 +1522,8 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 				searchString.index--;
 				printCommandString();
 				printSearchString();
-			}
-			if (commandString.index == 0 || searchString.index == 0) {
-
+			} else if (commandString.index == 0 || searchString.index == 0) {
+				emptyString(&highlights);
 				stateNormalMode.motion =
 					defaultNormalMode
 					.motion;       //< if typed once more than there are
