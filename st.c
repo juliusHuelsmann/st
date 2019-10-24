@@ -1490,6 +1490,17 @@ void gotoStringAndHighlight(int8_t sign) {
 	                                      //  is painted separately.
 }
 
+void pressKeys(char const* nullTerminatedString) {
+  size_t end;
+  for (size_t i = 0, end=strlen(nullTerminatedString); i < end; ++i) {
+    if (nullTerminatedString[i] == '\n') {
+      kpressNormalMode(&nullTerminatedString[i], 0, false, true, false);
+    } else {
+      kpressNormalMode(&nullTerminatedString[i], 1, false, false, false);
+    }
+  }
+}
+
 void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace) {
 
 	// [ESC] or [ENTER] abort resp. finish the current operation or 
@@ -1689,9 +1700,14 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 			stateNormalMode.motion.amount = 0; 
 		}
 
-		if (!discard) {
+		if (discard) {
+      for (size_t i = 0; i <  LEN(normalModeShortcuts); ++i) {
+        if (ksym[0] == normalModeShortcuts[i].key) {
+          pressKeys(normalModeShortcuts[i].value);
+        }
+      }
+    } else {
 			appendCommandString(ksym[0]);
-		}
 		//XXX: record last character sequence somewhere. (dot)
 
 		int diff = 0;
@@ -1738,6 +1754,7 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 			exitCommand();
 		}
 	}
+		}
 }
 
 void

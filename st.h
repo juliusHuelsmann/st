@@ -143,3 +143,18 @@ extern float alpha;
 extern float alphaUnfocussed;
 extern char wordDelimSmall[];
 extern char wordDelimLarge[];
+
+
+struct NormalModeShortcuts {
+  char key;
+  char * value;
+};
+/// XXX: this sucks.
+static struct NormalModeShortcuts  normalModeShortcuts [] = {
+  { 'C', "?Building\n" },
+  { 'c', "/Building\n" },
+  { 'F', "?: error:\n" },
+  { 'f', "/: error:\n" },
+  { 'X', "?:x@machineBook\n" },
+  { 'x', "/:x@machineBook\n" },
+};
