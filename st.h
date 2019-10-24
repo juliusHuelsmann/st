@@ -155,6 +155,6 @@ static struct NormalModeShortcuts  normalModeShortcuts [] = {
   { 'c', "/Building\n" },
   { 'F', "?: error:\n" },
   { 'f', "/: error:\n" },
-  { 'X', "?:x@machineBook\n" },
-  { 'x', "/:x@machineBook\n" },
+  { 'X', "?x@machineBook\n" },
+  { 'x', "/x@machineBook\n" },
 };

@@ -19,8 +19,10 @@
 #include <unistd.h>
 #include <wchar.h>
 
+
 #include "st.h"
 #include "win.h"
+#include "dynamicArray.h"
 
 #if   defined(__linux)
  #include <pty.h>
@@ -1249,15 +1251,10 @@ struct NormalModeState {
 	} motion;
 } stateNormalMode;
 
-// Normal mode search + command string.
-struct String {
-	uint32_t index;
-	uint32_t size;
-	char* content;
-} searchString = {0, 0, NULL};
-struct String commandString = {0, 0, NULL};
-struct String highlights = {0, 0, NULL};
-
+struct DynamicArray searchString  = UTF8_ARRAY; //CHAR_ARRAY; // UTF8_ARRAY
+//struct DynamicArray searchString  = CHAR_ARRAY; // UTF8_ARRAY
+struct DynamicArray commandString = CHAR_ARRAY;
+struct DynamicArray highlights    = QWORD_ARRAY;
 
 int 
 currentLine(int x, int y) 
@@ -1268,12 +1265,25 @@ currentLine(int x, int y)
 int 
 highlighted(int x, int y)
 {
-	for (uint32_t i = 0; i < highlights.index; i+=2) {
-		int32_t sx = ((uint32_t*) highlights.content)[i];
-		int32_t sy = ((uint32_t*) highlights.content)[i+1];
-		if (y == sy && x >= sx && x < sx + searchString.index) { 
-			return true; 
-		}
+  // Compute the legal bounds for a hit:
+  int32_t const stringSize = size(&searchString);
+  int32_t xMin = x - stringSize;
+  int32_t yMin = y;
+  while (xMin < 0 && yMin > 0) { //< I think this temds to be more efficient than
+    xMin += term.col;            //  division + modulo.
+    yMin --;
+  }
+  if (xMin < 0) { xMin = 0; } 
+
+
+  uint32_t highSize = size(&highlights);
+  uint32_t *ptr = (uint32_t*) highlights.content;
+	for (uint32_t i = 0; i < highSize; ++i) {
+		int32_t const sx = *(ptr++);
+		int32_t const sy = *(ptr++);
+    if (BETWEEN(sy, yMin, y) && (sy != yMin || sx > xMin) && (sy != y || sx <= x)) { 
+      return true;
+    }
 	}
 	return false;
 }
@@ -1286,15 +1296,7 @@ int mod(int a, int b) {
 	return a % b;
 }
 
-void
-emptyString(struct String* s) { s->index = 0; }
-
-void appendString(struct String* s, char c) {
-	if (s->index >= s->size) { s->content = (char *) realloc(s->content, s->size += 15); }
-	s->content[s->index++] = c;
-}
-
-void displayString(struct String const *str, Glyph *g, int yPos) {
+void displayString(struct DynamicArray const *str, Glyph *g, int yPos) {
 	// Threshold: if there is nothing or no space to print, do not print.
 	if (term.col == 0 || str->index == 0) { 
 		term.dirty[yPos] = 1; //< mark this line as 'dirty', because the line is not 
@@ -1302,7 +1304,7 @@ void displayString(struct String const *str, Glyph *g, int yPos) {
 		return; 
 	}
 
-	uint32_t lineSize = MIN(str->index, term.col / 3);
+	uint32_t lineSize = MIN(size(str), term.col / 3);
 	uint32_t xEnd = term.col - 1;
 	assert(lineSize <= 1 + xEnd); //< as lineSize <= term.col/3 <= term.col - 1 + 1 = xEnd + 1
 	uint32_t xStart = 1 + xEnd - lineSize;
@@ -1312,8 +1314,18 @@ void displayString(struct String const *str, Glyph *g, int yPos) {
 
 	for (uint32_t lineIdx = 0; lineIdx < lineSize; lineIdx++) {
 		line[lineIdx] = *g;
-		//line[lineIdx].u = str->content[str->index - 1 - lineIdx];
-		line[lineIdx].u = str->content[str->index - lineSize + lineIdx];
+    char* end = viewEnd(str, lineSize - lineIdx - 1);
+    if (str->itemSize == 7) { // my utf 8 encoding
+
+      uint8_t amount = end[0];
+      assert(amount <= str->itemSize - 1);
+      //memcpy(&line[lineIdx].u, end+1, amount);
+      //memcpy(&line[lineIdx].u, end+1, amount);
+      line[lineIdx].u = *((uint32_t*) (end + 1));
+    } else {
+      memcpy(&line[lineIdx].u, end, str->itemSize);
+    }
+		//line[lineIdx].u = str->content[str->index - lineSize + lineIdx];
 	}
 	xdrawline(TLINE(yPos), 0, yPos, xStart);
 	xdrawline(line -xStart, xStart, yPos, xEnd+1);
@@ -1326,7 +1338,7 @@ void printCommandString() {
 }
 
 void appendCommandString(char c) {
-	appendString(&commandString, c);
+	append(&commandString, &c);
 	printCommandString();
 }
 
@@ -1335,10 +1347,6 @@ void printSearchString() {
 	displayString(&searchString, &g, term.row - 2);
 }
 
-void appendSearchString(char c) {
-	appendString(&searchString, c);
-	printSearchString();
-}
 
 /// Default state if no operation is performed.
 struct NormalModeState defaultNormalMode = {{0,0,0}, {noop, {0, 0, 0}}, {0, none, {0, 0, 0}, false}};
@@ -1410,7 +1418,7 @@ void exitCommand() {
 	stateNormalMode.motion = defaultNormalMode.motion;
 	selclear();
 
-	emptyString(&commandString);
+	empty(&commandString);
 
 	tfulldirt();
 	redraw();
@@ -1422,17 +1430,24 @@ void exitCommand() {
 bool 
 gotoString(int8_t sign) {
 	uint32_t findIndex = 0;
-	uint32_t const maxIteration = (HISTSIZE + term.row) * term.col;  //< one complete traversal.
-	for (uint32_t cIteration = 0; findIndex < searchString.index 
+  uint32_t searchStringSize = size(&searchString);
+  uint32_t const maxIteration = (HISTSIZE + term.row) * term.col;  //< one complete traversal.
+	for (uint32_t cIteration = 0; findIndex < searchStringSize
 			&& cIteration ++ < maxIteration; moveLetter(sign)) {
-		char const searchChar = searchString.content[sign == 1 
-			? findIndex : searchString.index - 1 - findIndex];
-		if (TLINE(term.c.y)[term.c.x].u == searchChar) findIndex++;
+		//char const searchChar = searchString.content[sign == 1 
+		//	? findIndex : searchString.index - 1 - findIndex];
+    //XXX: Here a correct comparison has to be performed.
+		char const searchChar = *((uint32_t*)((sign == 1 ? view(&searchString, findIndex) 
+        : viewEnd(&searchString, findIndex))+1));
+
+    char const fu = TLINE(term.c.y)[term.c.x].u;
+
+		if (fu == searchChar) findIndex++;
 		else findIndex = 0;
 	}
-	bool const found = findIndex == searchString.index;
+	bool const found = findIndex == searchStringSize;
 	if (found) {
-		for (uint32_t i = 0; i < searchString.index; i++) { moveLetter(-sign); }
+		for (uint32_t i = 0; i < searchStringSize; i++) { moveLetter(-sign); }
 	}
 	return found;
 }
@@ -1447,24 +1462,22 @@ gotoNextString(int8_t sign) {
 /// Highlight all found strings on the current screen.
 void 
 highlightStringOnScreen() {
-	if (searchString.index == 0) { return; }
+	if (isEmpty(&searchString)) { return; }
+  uint32_t const searchStringSize = size(&searchString);
 	uint32_t findIndex = 0;
 	uint32_t xStart, yStart;
 	for (uint32_t y = 0; y < term.row; y++) {
 		for (uint32_t x = 0; x < term.col; x++) {
-			if (TLINE(y)[x].u == searchString.content[findIndex]) {
+			if (TLINE(y)[x].u == *((uint32_t*)(view(&searchString, findIndex)+1))) {
 				if (findIndex++ == 0) { 
 					xStart = x;
 					yStart = y;
 				} 
-        if (findIndex == searchString.index) {
+        if (findIndex == searchStringSize) {
 					// mark selected
-					if (highlights.index >= highlights.size) { 
-						highlights.content = (char *) realloc(highlights.content, 
-								4*(highlights.size += 10)); 
-					}
-					((uint32_t*) highlights.content)[highlights.index++] = xStart;
-					((uint32_t*) highlights.content)[highlights.index++] = yStart;
+          append(&highlights, &xStart);
+          append(&highlights, &yStart);
+
 					findIndex = 0;
 					term.dirty[yStart] = 1;
 				} 
@@ -1477,7 +1490,7 @@ highlightStringOnScreen() {
 
 void gotoStringAndHighlight(int8_t sign) {
 	bool const found = gotoString(sign);  //< find the next string to the current position
-	emptyString(&highlights);             //< remove previous highlights
+	empty(&highlights);             //< remove previous highlights
 	if (found) {                          //< apply new highlights if found
 		//if (sign == -1) { moveLetter(-1); }
 		highlightStringOnScreen(sign);      
@@ -1509,12 +1522,12 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 		if (stateNormalMode.command.op == noop 
 				&& stateNormalMode.motion.search == none
 				&& stateNormalMode.motion.amount == 0) {
-			emptyString(&searchString);
+			empty(&searchString);
 			normalMode(NULL);
 			tfulldirt();
 			redraw();
 		} else {
-			if (enter && stateNormalMode.motion.search != none && searchString.index > 0) {
+			if (enter && stateNormalMode.motion.search != none && !isEmpty(&searchString)) {
 				stateNormalMode.motion.finished = true;
 				return;
 			}
@@ -1528,13 +1541,13 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 		int8_t const sign = stateNormalMode.motion.search == forward ? 1 : -1;
 		// Apply start position.
 		if (backspace) {
-			if (commandString.index > 0 && searchString.index > 0) {
-				commandString.index--;
-				searchString.index--;
+			if (!isEmpty(&commandString) && !isEmpty(&searchString)) {
+        pop(&commandString);
+        pop(&searchString);
 				printCommandString();
 				printSearchString();
-			} else if (commandString.index == 0 || searchString.index == 0) {
-				emptyString(&highlights);
+			} else if (isEmpty(&commandString) || isEmpty(&searchString)) {
+				empty(&highlights);
 				stateNormalMode.motion =
 					defaultNormalMode
 					.motion;       //< if typed once more than there are
@@ -1547,8 +1560,23 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 		} else {
 			for (uint32_t i = 0; i < len; i++) {
 				appendCommandString(ksym[i]);
-				appendSearchString(ksym[i]);
 			}
+      if (len > 0) {
+        uint8_t length = len;
+        printf("%d\n", length);
+
+        assert(length <= searchString.itemSize - 1);
+        appendPartial(&searchString, &length, 1);
+        uint32_t searchStringSize = size(&searchString);
+        char* k = viewEnd(&searchString, 0);
+        //memcpy(k+1, ksym, len);
+        utf8decode(ksym, (Rune*)(k+1), len);
+        assert(k[0] == length);
+
+        //appendPartial(&searchString, ksym, 1);
+        //assert(viewEnd(&searchString, 0)[0] == ksym[0]);
+      }
+      printSearchString();
 			// it is now `harder` to find the string, henceall positions that did not match until now
 			// will not match the longer string. Thus the start position is the current position
 		}
@@ -1568,7 +1596,7 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 				case noop:           //< Start yank mode & set #op
 					enableMode(yank);
 					selstart(term.c.x, term.c.y, term.scr, 0);
-					emptyString(&commandString);
+					empty(&commandString);
 					appendCommandString(ksym[0]);
 					return;
 				case visualLine:     //< Complete yank operation
@@ -1606,7 +1634,7 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 					exitCommand();
 				}
 			}
-			emptyString(&commandString);
+			empty(&commandString);
 			appendCommandString(ksym[0]);
 			return;
 	}
@@ -1669,7 +1697,7 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 		}
 		case '/': sign = 1;
 		case '?': 
-			emptyString(&searchString);
+			empty(&searchString);
 			stateNormalMode.motion.search = sign == 1 ? forward : backward; 
 			stateNormalMode.motion.searchPosition.x = term.c.x;
 			stateNormalMode.motion.searchPosition.y = term.c.y;
@@ -1727,8 +1755,8 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 		term.c.y = _newScr < 0 ? 0 : (_newScr >= HISTSIZE ? term.bot : term.c.y);
 		term.scr = mod(_newScr, HISTSIZE);
 
-		if (highlights.index > 0) {
-			emptyString(&highlights);
+		if (!isEmpty(&highlights)) {
+			empty(&highlights);
 			highlightStringOnScreen();
 		}
 		
