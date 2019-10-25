@@ -789,7 +789,7 @@ xloadcols(void)
 	if (opt_alpha)
 		alpha = strtof(opt_alpha, NULL);
 
-	float usedAlpha = focused ? alpha : alphaUnfocussed;
+	float const usedAlpha = focused ? alpha : alphaUnfocussed;
 
 	dc.col[defaultbg].color.alpha = (unsigned short)(0xffff * usedAlpha);
 	dc.col[defaultbg].pixel &= 0x00FFFFFF;
