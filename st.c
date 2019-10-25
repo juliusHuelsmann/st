@@ -1660,7 +1660,10 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 								term.c.y += floor(1.0 * amount / term.col);
 								break;
 							}
-		case '0': term.c.x = 0;        break;
+		case '0': 
+							if (stateNormalMode.motion.amount == 0) { term.c.x = 0; }
+							else { discard = true; }
+							break;
 		case '$': term.c.x = term.col-1; break;
 		case 'w':
 		case 'W': 
@@ -1737,7 +1740,6 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 	} else {
 		char* kCommand = checkGetNext(currentCommand);
 		utf8decode(ksym, (Rune*)(kCommand), len);
-
 
 		int diff = 0;
 		if (term.c.y > 0) {
