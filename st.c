@@ -1251,9 +1251,10 @@ struct NormalModeState {
 	} motion;
 } stateNormalMode;
 
-struct DynamicArray searchString  = UTF8_ARRAY; //CHAR_ARRAY; // UTF8_ARRAY
-//struct DynamicArray searchString  = CHAR_ARRAY; // UTF8_ARRAY
-struct DynamicArray commandString = CHAR_ARRAY;
+struct DynamicArray searchString  = UTF8_ARRAY;
+struct DynamicArray commandString = CHAR_ARRAY; // XXX: to be changed into utf8 array, 
+                                                // and to be emptied when a 'new' command 
+                                                // starts.
 struct DynamicArray highlights    = QWORD_ARRAY;
 
 int 
@@ -1315,17 +1316,7 @@ void displayString(struct DynamicArray const *str, Glyph *g, int yPos) {
 	for (uint32_t lineIdx = 0; lineIdx < lineSize; lineIdx++) {
 		line[lineIdx] = *g;
     char* end = viewEnd(str, lineSize - lineIdx - 1);
-    if (str->itemSize == 7) { // my utf 8 encoding
-
-      uint8_t amount = end[0];
-      assert(amount <= str->itemSize - 1);
-      //memcpy(&line[lineIdx].u, end+1, amount);
-      //memcpy(&line[lineIdx].u, end+1, amount);
-      line[lineIdx].u = *((uint32_t*) (end + 1));
-    } else {
-      memcpy(&line[lineIdx].u, end, str->itemSize);
-    }
-		//line[lineIdx].u = str->content[str->index - lineSize + lineIdx];
+    memcpy(&line[lineIdx].u, end, str->itemSize);
 	}
 	xdrawline(TLINE(yPos), 0, yPos, xStart);
 	xdrawline(line -xStart, xStart, yPos, xEnd+1);
@@ -1334,6 +1325,7 @@ void displayString(struct DynamicArray const *str, Glyph *g, int yPos) {
 
 void printCommandString() {
 	Glyph g = {'c', ATTR_ITALIC | ATTR_FAINT , defaultfg, defaultbg};
+	if (term.c.y == term.row-1) { g.mode ^= ATTR_CURRENT; } //< dont highlight
 	displayString(&commandString, &g, term.row - 1);
 }
 
@@ -1344,6 +1336,7 @@ void appendCommandString(char c) {
 
 void printSearchString() {
 	Glyph g = {'c', ATTR_ITALIC | ATTR_BOLD_FAINT, defaultfg, defaultbg};
+	if (term.c.y == term.row-2) { g.mode ^= ATTR_CURRENT; } //< dont highlight
 	displayString(&searchString, &g, term.row - 2);
 }
 
@@ -1412,7 +1405,6 @@ bool contains (char ksym, char const * values, uint32_t amount) {
 	return false;
 }
 
-
 void exitCommand() {
 	stateNormalMode.command = defaultNormalMode.command;
 	stateNormalMode.motion = defaultNormalMode.motion;
@@ -1431,24 +1423,19 @@ bool
 gotoString(int8_t sign) {
 	uint32_t findIndex = 0;
   uint32_t searchStringSize = size(&searchString);
-  uint32_t const maxIteration = (HISTSIZE + term.row) * term.col;  //< one complete traversal.
+  uint32_t const maxIteration = (HISTSIZE + term.row) * term.col + searchStringSize;  //< one complete traversal.
 	for (uint32_t cIteration = 0; findIndex < searchStringSize
 			&& cIteration ++ < maxIteration; moveLetter(sign)) {
-		//char const searchChar = searchString.content[sign == 1 
-		//	? findIndex : searchString.index - 1 - findIndex];
-    //XXX: Here a correct comparison has to be performed.
-		char const searchChar = *((uint32_t*)((sign == 1 ? view(&searchString, findIndex) 
-        : viewEnd(&searchString, findIndex))+1));
+		uint32_t const searchChar = *((uint32_t*)(sign == 1 ? view(&searchString, findIndex) 
+        : viewEnd(&searchString, findIndex)));
 
-    char const fu = TLINE(term.c.y)[term.c.x].u;
+    uint32_t const fu = TLINE(term.c.y)[term.c.x].u;
 
 		if (fu == searchChar) findIndex++;
 		else findIndex = 0;
 	}
 	bool const found = findIndex == searchStringSize;
-	if (found) {
-		for (uint32_t i = 0; i < searchStringSize; i++) { moveLetter(-sign); }
-	}
+	if (found) { for (uint32_t i = 0; i < searchStringSize; i++) { moveLetter(-sign); } }
 	return found;
 }
 
@@ -1468,7 +1455,7 @@ highlightStringOnScreen() {
 	uint32_t xStart, yStart;
 	for (uint32_t y = 0; y < term.row; y++) {
 		for (uint32_t x = 0; x < term.col; x++) {
-			if (TLINE(y)[x].u == *((uint32_t*)(view(&searchString, findIndex)+1))) {
+			if (TLINE(y)[x].u == *((uint32_t*)(view(&searchString, findIndex)))) {
 				if (findIndex++ == 0) { 
 					xStart = x;
 					yStart = y;
@@ -1514,6 +1501,16 @@ void pressKeys(char const* nullTerminatedString) {
   }
 }
 
+void executeCommand(struct DynamicArray const *command) {
+  size_t end;
+  char decoded [32];
+  for (size_t i = 0, end=size(command); i < end; ++i) {
+    size_t len = utf8encode(*((Rune*)view(command, i)) , decoded);
+    kpressNormalMode(decoded, len, false, false, false);
+  }
+  kpressNormalMode(NULL, 0, false, true, false);
+}
+
 void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace) {
 
 	// [ESC] or [ENTER] abort resp. finish the current operation or 
@@ -1524,7 +1521,7 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 				&& stateNormalMode.motion.amount == 0) {
 			empty(&searchString);
 			normalMode(NULL);
-			tfulldirt();
+      tsetdirt(0, term.row-3);
 			redraw();
 		} else {
 			if (enter && stateNormalMode.motion.search != none && !isEmpty(&searchString)) {
@@ -1533,6 +1530,8 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 			}
 			exitCommand();
 		}
+    printCommandString();
+    printSearchString();
 		return;
 	} //< ! (esc || enter)
 	// Search: append to search string & conduct search for best hit, starting at start pos,
@@ -1562,19 +1561,8 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 				appendCommandString(ksym[i]);
 			}
       if (len > 0) {
-        uint8_t length = len;
-        printf("%d\n", length);
-
-        assert(length <= searchString.itemSize - 1);
-        appendPartial(&searchString, &length, 1);
-        uint32_t searchStringSize = size(&searchString);
-        char* k = viewEnd(&searchString, 0);
-        //memcpy(k+1, ksym, len);
-        utf8decode(ksym, (Rune*)(k+1), len);
-        assert(k[0] == length);
-
-        //appendPartial(&searchString, ksym, 1);
-        //assert(viewEnd(&searchString, 0)[0] == ksym[0]);
+        char* k = checkGetNext(&searchString);
+        utf8decode(ksym, (Rune*)(k), len);
       }
       printSearchString();
 			// it is now `harder` to find the string, henceall positions that did not match until now
