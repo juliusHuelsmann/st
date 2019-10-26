@@ -1719,6 +1719,14 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 								gotoStringAndHighlight(sign);
 							}
 							break;
+		case 't': 
+							if (sel.type == SEL_REGULAR) {
+								sel.type = SEL_RECTANGULAR;
+							} else {
+								sel.type = SEL_REGULAR;
+							}
+							tsetdirt(sel.nb.y, sel.ne.y);
+							discard = true;
 		default:
 							discard = true;
 	}
