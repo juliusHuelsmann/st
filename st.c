@@ -1597,11 +1597,13 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 						enableMode(yank);
 						selstart(term.c.x, term.c.y, term.scr, 0);
 						empty(currentCommand);
+						break;
 					case visualLine:     //< Complete yank operation
 					case visual:
 						xsetsel(getsel());     //< yank
 						xclipcopy();
 						exitCommand();         //< reset command
+						break;
 					case yank:           //< Complete yank operation as in y#amount j
 						selstart(0, term.c.y, term.scr, 0);
 						uint32_t const origY = term.c.y;
