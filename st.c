@@ -1542,7 +1542,8 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 	if (stateNormalMode.motion.search != none && !stateNormalMode.motion.finished) {
 		int8_t const sign = stateNormalMode.motion.search == forward ? 1 : -1;
 		// Apply start position.
-		if (backspace) {
+		if (backspace) { // XXX: if a quantifier is subject to removal, it is currently only removed 
+			               //      from the  command string.
 			if (!isEmpty(currentCommand) && !isEmpty(&searchString)) {
 				pop(currentCommand);
 				pop(&searchString);
