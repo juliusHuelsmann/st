@@ -151,4 +151,3 @@ typedef struct NormalModeShortcuts {
 
 extern NormalModeShortcuts normalModeShortcuts[];
 extern size_t const amountNormalModeShortcuts;
-

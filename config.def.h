@@ -541,4 +541,3 @@ struct NormalModeShortcuts normalModeShortcuts [] = {
 };
 
 size_t const amountNormalModeShortcuts = sizeof(normalModeShortcuts) / sizeof(*normalModeShortcuts);
-
