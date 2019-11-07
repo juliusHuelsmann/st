@@ -16,7 +16,7 @@ static int borderpx = 2;
  * 4: value of shell in /etc/passwd
  * 5: value of shell in config.h
  */
-static char *shell = "/bin/sh";
+static char *shell = "/bin/zsh";
 char *utmp = NULL;
 char *stty_args = "stty raw pass8 nl -echo -iexten -cstopb 38400";
 
@@ -146,6 +146,7 @@ static unsigned int rows = 24;
  * Default colour and shape of the mouse cursor
  */
 static unsigned int mouseshape = XC_xterm;
+
 static unsigned int mousefg = 7;
 static unsigned int mousebg = 0;
 
@@ -154,6 +155,12 @@ static unsigned int mousebg = 0;
  * doesn't match the ones requested.
  */
 static unsigned int defaultattr = 11;
+/// Highlight color
+static unsigned int highlightBg = 160; //1; //8;
+static unsigned int highlightFg = 15;
+/// Current line
+static unsigned int currentBg = 0;
+static unsigned int currentFg = 15;
 
 
 /// Xresources preferences to load at startup
@@ -214,8 +221,10 @@ static char *openurlcmd[] = { "/bin/sh", "-c",
 #define TERMMOD (AltMask|ShiftMask)
 #define CTRLMOD (AltMask|ShiftMask)
 
+
 static Shortcut shortcuts[] = {
-  // external pipe
+	{ AltMask,              XK_c,      normalMode, {.i = 0}},
+	// external pipe
 	{ TERMMOD, XK_u, externalpipe, { .v = openurlcmd } },
 	/* mask                 keysym          function        argument */
 	{ XK_ANY_MOD,           XK_Break,       sendbreak,      {.i =  0} },
@@ -516,3 +525,19 @@ static char ascii_printable[] =
 	" !\"#$%&'()*+,-./0123456789:;<=>?"
 	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
 	"`abcdefghijklmnopqrstuvwxyz{|}~";
+
+/// word sepearors normal mode
+char wordDelimSmall[] = " \t!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+char wordDelimLarge[] = " \t"; /// <Word sepearors normal mode (capital W)
+
+/// Shortcusts executed in normal mode (which should not already be in use)
+struct NormalModeShortcuts normalModeShortcuts [] = {
+	{ 'C', "?Building\n" },
+	{ 'c', "/Building\n" },
+	{ 'F', "?: error:\n" },
+	{ 'f', "/: error:\n" },
+	{ 'X', "?juli@machine\n" },
+	{ 'x', "/juli@machine\n" },
+};
+
+size_t const amountNormalModeShortcuts = sizeof(normalModeShortcuts) / sizeof(*normalModeShortcuts);

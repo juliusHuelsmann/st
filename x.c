@@ -154,7 +154,6 @@ typedef struct {
 static inline ushort sixd_to_16bit(int);
 static int xmakeglyphfontspecs(XftGlyphFontSpec *, const Glyph *, int, int, int);
 static void xdrawglyphfontspecs(const XftGlyphFontSpec *, Glyph, int, int, int);
-static void xdrawglyph(Glyph, int, int);
 static void xclear(int, int, int, int);
 static int xgeommasktogravity(int);
 static void ximopen(Display *);
@@ -360,7 +359,7 @@ mousesel(XEvent *e, int done)
 			break;
 		}
 	}
-	selextend(evcol(e), evrow(e), seltype, done);
+	xselextend(evcol(e), evrow(e), seltype, done);
 	if (done)
 		setsel(getsel(), e->xbutton.time);
 }
@@ -464,7 +463,7 @@ bpress(XEvent *e)
 		xsel.tclick2 = xsel.tclick1;
 		xsel.tclick1 = now;
 
-		selstart(evcol(e), evrow(e), snap);
+		xselstart(evcol(e), evrow(e), snap);
 	}
 }
 
@@ -751,6 +750,19 @@ xloadcolor(int i, const char *name, Color *ncolor)
 }
 
 void
+normalMode(Arg const *_)  //< the argument is just for the sake of 
+                          //  adhering to the function format. 
+{
+	win.mode ^= MODE_NORMAL; //< toggle normal mode via exclusive or.
+	if (win.mode & MODE_NORMAL) {
+		onNormalModeStart();
+	} else {
+		onNormalModeStop();
+	}
+}
+
+
+void
 xloadcols(void)
 {
 	int i;
@@ -777,7 +789,7 @@ xloadcols(void)
 	if (opt_alpha)
 		alpha = strtof(opt_alpha, NULL);
 
-	float usedAlpha = focused ? alpha : alphaUnfocussed;
+	float const usedAlpha = focused ? alpha : alphaUnfocussed;
 
 	dc.col[defaultbg].color.alpha = (unsigned short)(0xffff * usedAlpha);
 	dc.col[defaultbg].pixel &= 0x00FFFFFF;
@@ -1336,6 +1348,14 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
 		base.fg = defaultattr;
 	}
 
+	if (base.mode & ATTR_HIGHLIGHT) {
+		base.bg = highlightBg;
+		base.fg = highlightFg;
+	} else if ((base.mode & ATTR_CURRENT) && (win.mode & MODE_NORMAL)) {
+		base.bg = currentBg;
+		base.fg = currentFg;
+	}
+
 	if (IS_TRUECOL(base.fg)) {
 		colfg.alpha = 0xffff;
 		colfg.red = TRUERED(base.fg);
@@ -1468,8 +1488,9 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	Color drawcol;
 
 	/* remove the old cursor */
-	if (selected(ox, oy))
-		og.mode ^= ATTR_REVERSE;
+	if (selected(ox, oy)) og.mode ^= ATTR_REVERSE;
+	if (highlighted(ox, oy)) { og.mode ^= ATTR_HIGHLIGHT; }
+	if (currentLine(ox, oy)) { og.mode ^= ATTR_CURRENT; }
 	xdrawglyph(og, ox, oy);
 
 	if (IS_SET(MODE_HIDE))
@@ -1500,6 +1521,11 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 		}
 		drawcol = dc.col[g.bg];
 	}
+  
+	if ((g.mode & ATTR_CURRENT) && (win.mode & MODE_NORMAL)) {
+		g.bg = currentBg;
+		g.fg = currentFg;
+	} 
 
 	/* draw the new one */
 	if (IS_SET(MODE_FOCUSED)) {
@@ -1590,6 +1616,12 @@ xdrawline(Line line, int x1, int y1, int x2)
 			continue;
 		if (selected(x, y1))
 			new.mode ^= ATTR_REVERSE;
+		if (highlighted(x, y1)) {
+			new.mode ^= ATTR_HIGHLIGHT;
+		} 
+    if (currentLine(x, y1)) {
+			new.mode ^= ATTR_CURRENT;
+		}
 		if (i > 0 && ATTRCMP(base, new)) {
 			xdrawglyphfontspecs(specs, base, i, ox, y1);
 			specs += i;
@@ -1782,6 +1814,12 @@ kpress(XEvent *ev)
 		return;
 
 	len = XmbLookupString(xw.xic, e, buf, sizeof buf, &ksym, &status);
+	if (IS_SET(MODE_NORMAL)) {
+		kpressNormalMode(buf, strlen(buf), 
+				ksym == XK_Escape, ksym == XK_Return, ksym == XK_BackSpace);
+		return;
+	}
+
 	/* 1. shortcuts */
 	for (bp = shortcuts; bp < shortcuts + LEN(shortcuts); bp++) {
 		if (ksym == bp->keysym && match(bp->mod, e->state)) {
@@ -1921,8 +1959,9 @@ run(void)
 				XNextEvent(xw.dpy, &ev);
 				if (XFilterEvent(&ev, None))
 					continue;
-				if (handler[ev.type])
+				if (handler[ev.type]) {
 					(handler[ev.type])(&ev);
+				}
 			}
 
 			draw();
