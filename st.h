@@ -91,7 +91,7 @@ int highlighted(int, int);
 int currentLine(int, int);
 void kscrolldown(const Arg *);
 void kscrollup(const Arg *);
-void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace);
+void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace, bool ctrl);
 void normalMode(Arg const *);
 void onNormalModeStart();
 void onNormalModeStop();
