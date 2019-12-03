@@ -244,6 +244,15 @@ static char *opt_title = NULL;
 
 static int oldbutton = 3; /* button event on startup: 3 = release */
 
+bool 
+isInsertCursor() { return !(win.mode & MODE_NORMAL); }
+
+void 
+normalMode(Arg const *_) {
+	win.mode ^= MODE_NORMAL; 
+	normalModeStart();
+}
+
 void
 clipcopy(const Arg *dummy)
 {
@@ -1099,6 +1108,7 @@ xinit(int cols, int rows)
 
 	/* Xft rendering context */
 	xw.draw = XftDrawCreate(xw.dpy, xw.buf, xw.vis, xw.cmap);
+	printf("XINIT\n");
 
 	/* input methods */
 	ximopen(xw.dpy);
@@ -1731,6 +1741,11 @@ kpress(XEvent *ev)
 		return;
 
 	len = XmbLookupString(xw.xic, e, buf, sizeof buf, &ksym, &status);
+	if (IS_SET(MODE_NORMAL)) {
+		kpressNormalMode(ksym);
+		return;
+	}
+
 	/* 1. shortcuts */
 	for (bp = shortcuts; bp < shortcuts + LEN(shortcuts); bp++) {
 		if (ksym == bp->keysym && match(bp->mod, e->state)) {
@@ -1838,7 +1853,7 @@ run(void)
 		if (FD_ISSET(ttyfd, &rfd)) {
 			ttyread();
 			if (blinktimeout) {
-				blinkset = tattrset(ATTR_BLINK);
+				blinkset = tattrset(ATTR_BLINK, 0);
 				if (!blinkset)
 					MODBIT(win.mode, 0, MODE_BLINK);
 			}
@@ -1854,7 +1869,7 @@ run(void)
 
 		dodraw = 0;
 		if (blinktimeout && TIMEDIFF(now, lastblink) > blinktimeout) {
-			tsetdirtattr(ATTR_BLINK);
+			tattrset(ATTR_BLINK, 1);
 			win.mode ^= MODE_BLINK;
 			lastblink = now;
 			dodraw = 1;

@@ -23,7 +23,16 @@ LIBS = -L$(X11LIB) -lm -lrt -lX11 -lutil -lXft \
 # flags
 STCPPFLAGS = -DVERSION=\"$(VERSION)\" -D_XOPEN_SOURCE=600
 STCFLAGS = $(INCS) $(STCPPFLAGS) $(CPPFLAGS) $(CFLAGS)
-STLDFLAGS = $(LIBS) $(LDFLAGS)
+CFLAGS ?= -Wall \
+    -D_FORTIFY_SOURCE=2 \
+    -Wextra -Wcast-align -Wcast-qual -Wpointer-arith \
+    -Waggregate-return -Wunreachable-code -Wfloat-equal \
+    -Wformat=2 -Wredundant-decls -Wundef \
+    -Wdisabled-optimization -Wshadow -Wmissing-braces \
+    -Wstrict-aliasing=2 -Wstrict-overflow=5 -Wconversion \
+    -Wno-unused-parameter \
+    -pedantic -std=c11
+STLDFLAGS = $(LIBS) $(LDFLAGS) $(CFLAGS)
 
 # OpenBSD:
 #CPPFLAGS = -DVERSION=\"$(VERSION)\" -D_XOPEN_SOURCE=600 -D_BSD_SOURCE
@@ -33,3 +42,4 @@ STLDFLAGS = $(LIBS) $(LDFLAGS)
 
 # compiler and linker
 # CC = c99
+# CC = gcc

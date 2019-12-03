@@ -1,5 +1,6 @@
 /* See LICENSE for license details. */
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -11,6 +12,42 @@
 #define DIVCEIL(n, d)		(((n) + ((d) - 1)) / (d))
 #define DEFAULT(a, b)		(a) = (a) ? (a) : (b)
 #define LIMIT(x, a, b)		(x) = (x) < (a) ? (a) : (x) > (b) ? (b) : (x)
+
+static inline int min(int a, int b) { return a < b ? a : b; }
+static inline int max(int a, int b) { return a > b ? a : b; }
+
+static inline int mod(int a, int b) { for (a %= b; a < 0; a += b); return a; }
+
+static inline bool between(int x, int a, int b) { return x >= a && x <= b; }
+
+static inline bool modBetween(int x, int a, int b, int s) {
+  return (a <= b) ? between(x, a, b): between(x, a, s) || between(x, 0, b);
+}
+
+static inline bool limit(int *x, int a, int b) {
+	if (*x < a) { 
+		*x = a;
+		return true;
+	}
+	if (*x > b) {
+		*x = b;
+		return true;
+	}
+	return false;
+}
+
+static inline bool rlimit(int *x, int a, int b) {
+	if (*x < a) { 
+		*x = b;
+		return true;
+	}
+	if (*x > b) {
+		*x = a;
+		return true;
+	}
+	return false;
+}
+
 #define ATTRCMP(a, b)		((a).mode != (b).mode || (a).fg != (b).fg || \
 				(a).bg != (b).bg)
 #define TIMEDIFF(t1, t2)	((t1.tv_sec-t2.tv_sec)*1000 + \
@@ -76,16 +113,22 @@ typedef union {
 	const void *v;
 } Arg;
 
+
 void die(const char *, ...);
 void redraw(void);
 void draw(void);
+
+void normalMode(Arg const *);
+void normalModeStart(void);
+bool isInsertCursor();
+void kpressNormalMode(char);
 
 void printscreen(const Arg *);
 void printsel(const Arg *);
 void sendbreak(const Arg *);
 void toggleprinter(const Arg *);
 
-int tattrset(int);
+int tattrset(int, int);
 void tnew(int, int);
 void tresize(int, int);
 void tsetdirtattr(int);
@@ -109,6 +152,7 @@ size_t utf8encode(Rune, char *);
 void *xmalloc(size_t);
 void *xrealloc(void *, size_t);
 char *xstrdup(char *);
+
 
 /* config.h globals */
 extern char *utmp;
