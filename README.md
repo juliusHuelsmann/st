@@ -160,6 +160,7 @@ Authors of the Alpha Patch
 Authors of the Alpha-Focus Patch
 --------------------------------
 * Julius Hülsmann - <juliusHuelsmann [at] gmail [dot] com>
+* [Kevin Velghe](https://github.com/paretje): Underline highlight fix
 
 
 
