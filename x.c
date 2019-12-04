@@ -1428,6 +1428,9 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
 				width, 1);
 	}
 
+	XCopyArea(xw.dpy, xw.buf, xw.win, dc.gc, winx, winy, width,
+			dc.font.ascent + dc.font.descent, winx, winy);
+
 	/* Reset clip to none. */
 	XftDrawSetClip(xw.draw, 0);
 }
@@ -1601,8 +1604,6 @@ xdrawline(Line line, int x1, int y1, int x2)
 void
 xfinishdraw(void)
 {
-	XCopyArea(xw.dpy, xw.buf, xw.win, dc.gc, 0, 0, win.w,
-			win.h, 0, 0);
 	XSetForeground(xw.dpy, dc.gc,
 			dc.col[IS_SET(MODE_REVERSE)?
 				defaultfg : defaultbg].pixel);
