@@ -714,6 +714,7 @@ xresize(int col, int row)
 			xw.depth);
 	XftDrawChange(xw.draw, xw.buf);
 	xclear(0, 0, win.w, win.h);
+	XCopyArea(xw.dpy, xw.buf, xw.win, dc.gc, 0, 0, win.w, win.h, 0, 0);
 
 	/* resize to new width */
 	xw.specbuf = xrealloc(xw.specbuf, col * sizeof(GlyphFontSpec));
@@ -1468,6 +1469,9 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
 				width, 1);
 	}
 
+	XCopyArea(xw.dpy, xw.buf, xw.win, dc.gc, winx, winy, width,
+			dc.font.ascent + dc.font.descent, winx, winy);
+
 	/* Reset clip to none. */
 	XftDrawSetClip(xw.draw, 0);
 }
@@ -1571,6 +1575,10 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 				borderpx + (cy + 1) * win.ch - 1,
 				win.cw, 1);
 	}
+
+	XCopyArea(xw.dpy, xw.buf, xw.win, dc.gc, borderpx + cx * win.cw,
+			borderpx + cy * win.ch, win.cw, win.ch,
+			borderpx + cx * win.cw, borderpx + cy * win.ch);
 }
 
 void
@@ -1641,8 +1649,6 @@ xdrawline(Line line, int x1, int y1, int x2)
 void
 xfinishdraw(void)
 {
-	XCopyArea(xw.dpy, xw.buf, xw.win, dc.gc, 0, 0, win.w,
-			win.h, 0, 0);
 	XSetForeground(xw.dpy, dc.gc,
 			dc.col[IS_SET(MODE_REVERSE)?
 				defaultfg : defaultbg].pixel);
