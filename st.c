@@ -985,6 +985,7 @@ void
 tsetdirt(int startY, int stopY) {
 	LIMIT(startY, 0, term.screenSize.y-1);
 	LIMIT(stopY,  0, term.screenSize.y-1);
+	printf("dirt%d%d\n", startY, stopY);
 
 	for (int i = startY; i <= stopY; i++) { term.dirty[i] = 1; }
 }
@@ -1164,19 +1165,7 @@ selscroll(int orig, int n) {
 
 void 
 tnewline(int first_col) {
-	int y = term.c.y;
-	bool const alt = isSet(MODE_ALTSCREEN);
-	if (!alt) {
-		// XXX: expand
-		if (y == term.totalSize.y - 1) {
-			//term.totalSize.y;
-
-		}
-	}
 	tmoveto(&term.c, first_col ? 0 : term.c.x, term.c.y + 1, true);
-	// emptying the line is only necessary for the non alt screen, and should be performed by 
-	// the tmoveto function.
-	// XXX: callocate new line
 }
 
 void
