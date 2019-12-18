@@ -762,6 +762,19 @@ normalMode(Arg const *_)  //< the argument is just for the sake of
 	}
 }
 
+void
+xloadalpha(void)
+{
+    /* set alpha value of bg color */
+    if (opt_alpha)
+        alpha = strtof(opt_alpha, NULL);
+
+    float const usedAlpha = focused ? alpha : alphaUnfocussed;
+
+    dc.col[defaultbg].color.alpha = (unsigned short)(0xffff * usedAlpha);
+    dc.col[defaultbg].pixel &= 0x00FFFFFF;
+    dc.col[defaultbg].pixel |= (unsigned char)(0xff * usedAlpha) << 24;
+}
 
 void
 xloadcols(void)
@@ -786,15 +799,7 @@ xloadcols(void)
 				die("could not allocate color %d\n", i);
 		}
 
-	/* set alpha value of bg color */
-	if (opt_alpha)
-		alpha = strtof(opt_alpha, NULL);
-
-	float const usedAlpha = focused ? alpha : alphaUnfocussed;
-
-	dc.col[defaultbg].color.alpha = (unsigned short)(0xffff * usedAlpha);
-	dc.col[defaultbg].pixel &= 0x00FFFFFF;
-	dc.col[defaultbg].pixel |= (unsigned char)(0xff * usedAlpha) << 24;
+	xloadalpha();
 	loaded = 1;
 }
 
@@ -1737,29 +1742,28 @@ focus(XEvent *ev)
 	if (e->mode == NotifyGrab)
 		return;
 
-	if (ev->type == FocusIn) {
-		XSetICFocus(xw.xic);
-		win.mode |= MODE_FOCUSED;
-		xseturgency(0);
-		if (IS_SET(MODE_FOCUS))
-			ttywrite("\033[I", 3, 0);
-	if (!focused) {
-			focused = true;
-			xloadcols();
-			redraw();
-		}
-	} else {
-		XUnsetICFocus(xw.xic);
-		win.mode &= ~MODE_FOCUSED;
-		if (IS_SET(MODE_FOCUS))
-			ttywrite("\033[O", 3, 0);
-		xloadcols();
-	if (focused) {
-			focused = false;
-			xloadcols();
-			redraw();
-		}
-	}
+    if (ev->type == FocusIn) {
+        XSetICFocus(xw.xic);
+        win.mode |= MODE_FOCUSED;
+        xseturgency(0);
+        if (IS_SET(MODE_FOCUS))
+            ttywrite("\033[I", 3, 0);
+        if (!focused) {
+            focused = true;
+            xloadalpha();
+            redraw();
+        }
+    } else {
+        XUnsetICFocus(xw.xic);
+        win.mode &= ~MODE_FOCUSED;
+        if (IS_SET(MODE_FOCUS))
+            ttywrite("\033[O", 3, 0);
+        if (focused) {
+            focused = false;
+            xloadalpha();
+            redraw();
+        }
+    }
 }
 
 int
