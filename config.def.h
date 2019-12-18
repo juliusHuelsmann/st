@@ -478,6 +478,8 @@ struct NormalModeShortcuts normalModeShortcuts [] = {
 	{ 'c', "/Building\n" },
 	{ 'F', "?: error:\n" },
 	{ 'f', "/: error:\n" },
+	{ 'Q', "?[Leaving vim, starting execution]\n" },
+	{ 'S', "Qf" },
 	{ 'X', "?juli@machine\n" },
 	{ 'x', "/juli@machine\n" },
 };
