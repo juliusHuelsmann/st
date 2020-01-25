@@ -1577,10 +1577,6 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 				borderpx + (cy + 1) * win.ch - 1,
 				win.cw, 1);
 	}
-
-	XCopyArea(xw.dpy, xw.buf, xw.win, dc.gc, borderpx + cx * win.cw,
-			borderpx + cy * win.ch, win.cw, win.ch,
-			borderpx + cx * win.cw, borderpx + cy * win.ch);
 }
 
 void
