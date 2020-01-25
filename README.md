@@ -32,7 +32,11 @@ The default behavior listed below can be adapted:
 * in Visual Mode `v`: use `t` to toggle block selection mode
 
 **Custom Commands**:
-Custom arrangements of the aforementioned commands can be defined in the configuration file:
+Custom arrangements of the aforementioned commands can be defined in the configuration file.
+
+##### Use cases
+- [Use Case: custom command: jump to first error when compiling from out of vim](https://user-images.githubusercontent.com/9212314/71112829-aa27c700-21cc-11ea-9eae-390b9760e4ca.gif)
+    - using shortcut `S` defined in configuration file
 
 More information on the patch can be found at the [release page](https://github.com/juliusHuelsmann/st/releases).
 
