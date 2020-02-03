@@ -763,7 +763,7 @@ xloadcols(void)
 		dc.col = xmalloc(dc.collen * sizeof(Color));
 	}
 
-	for (i = 0; i < dc.collen; i++) 
+	for (i = 0; i < dc.collen; i++)
 		if (!xloadcolor(i, NULL, &dc.col[i])) {
 			if (colorname[i])
 				die("could not allocate color '%s'\n", colorname[i]);
