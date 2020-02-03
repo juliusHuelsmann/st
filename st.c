@@ -1519,7 +1519,9 @@ void executeCommand(DynamicArray const *command) {
 void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace) {
 	// [ESC] or [ENTER] abort resp. finish the current operation or
 	// the Normal Mode if no operation is currently executed.
-	if (esc || enter) {
+	// #softEsc i acts like esc in case no operation is currently performed.
+	bool const softEsc = (len == 1 && ksym[0] == 'i');
+	if (esc || enter || softEsc) {
 		if (stateNormalMode.command.op == noop
 				&& stateNormalMode.motion.search == none
 				&& stateNormalMode.motion.amount == 0) {
@@ -1527,15 +1529,16 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 			empty(&highlights);
 			tfulldirt(); // < this also removes the search string and the last command.
 			normalMode(NULL);
-		} else {
+			return;
+		} else if (!softEsc) {
 			if (enter && stateNormalMode.motion.search != none && !isEmpty(&searchString)) {
 				exitCommand(); //stateNormalMode.motion.finished = true;
 				return;
 			} else {
 				abortCommand();
 			}
+			return;
 		}
-		return;
 	} //< ! (esc || enter)
 	// Search: append to search string & conduct search for best hit, starting at start pos,
 	//         highlighting all other occurrences on the current page if one is found.
