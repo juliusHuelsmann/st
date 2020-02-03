@@ -75,6 +75,7 @@ Authors of the Alpha-Focus Patch
 --------------------------------
 * Julius Hülsmann - <juliusHuelsmann [at] gmail [dot] com>
 * [glpub](https://github.com/glpub): Fix: erroneous color reset  
+* [Milos Stojanovic](https://github.com/M4444): Code Formatting
 
 
 
