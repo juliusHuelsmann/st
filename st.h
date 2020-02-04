@@ -89,7 +89,7 @@ int highlighted(int, int);
 int currentLine(int, int);
 void kscrolldown(const Arg *);
 void kscrollup(const Arg *);
-void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace);
+bool kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace);
 void normalMode(Arg const *);
 void onNormalModeStart();
 void onNormalModeStop();
@@ -147,3 +147,16 @@ typedef struct NormalModeShortcuts {
 
 extern NormalModeShortcuts normalModeShortcuts[];
 extern size_t const amountNormalModeShortcuts;
+
+/*[OP]i[Letter] <=> [Letter-start-target][OP][Ltter-stop-target]
+typedef struct {
+	char a;
+	char c;
+} keyCounterparts = {
+	{ '(', ')', "?" },
+	{ '<', '>' },
+	{ '{', '}' },
+	{ '[', ']' },
+	
+};
+*/

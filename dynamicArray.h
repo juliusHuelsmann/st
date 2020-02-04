@@ -1,3 +1,6 @@
+#ifndef DYNAMIC_ARRAY_H
+#define DYNAMIC_ARRAY_H
+
 #include <stdint.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -25,48 +28,49 @@ typedef struct DynamicArray {
 #define UTF8_ARRAY  DWORD_ARRAY
 
 
-inline char*
+static inline char*
 gnext(DynamicArray *s) { return &s->content[s->index+=s->itemSize]; }
 
-inline char*
+static inline char*
 get(DynamicArray const * s) { return &s->content[s->index]; }
 
-inline char*
+static inline char*
 view(DynamicArray const * s, uint32_t i) {
 	return s->content + i*s->itemSize;
 }
 
-inline char *
+static inline char *
 viewEnd(DynamicArray const *s, uint32_t i) {
 	return s->content + s->index - (i + 1) * s->itemSize;
 }
 
-inline void
-set(DynamicArray* s, char const *vals, uint8_t amount) {
-	assert(amount <= s->itemSize);
+static inline void
+set(DynamicArray* s, char const *vals, uint32_t amount) {
 	memcpy(s->content + s->index, vals, amount);
 }
 
-inline void
-snext(DynamicArray* s, char const *vals, uint8_t amount) {
+static inline void
+snext(DynamicArray* s, char const *vals, uint32_t amount) {
 	set(s, vals, amount);
-	s->index+=s->itemSize;
+	uint8_t const rest = amount % s->itemSize;
+	s->index+= amount + (rest ? s->itemSize : 0);
 }
 
-inline void
+static inline void
 empty(DynamicArray* s) { s->index = 0; }
 
-inline bool
+static inline bool
 isEmpty(DynamicArray* s) { return s->index == 0; }
 
-inline uint32_t
+static inline uint32_t
 size(DynamicArray const * s) { return s->index / s->itemSize; }
 
-inline void
+static inline void
 pop(DynamicArray* s) { s->index -= s->itemSize; }
 
-inline void checkSetNext(DynamicArray *s, char const *c, uint8_t amount) {
-	if (s->index + s->itemSize >= s->allocated) {
+
+static inline void checkSetNext(DynamicArray *s, char const *c, uint32_t amount) {
+	while (s->index + s->itemSize * amount >= s->allocated) {
 		if ((s->content = (char *)realloc(
 						s->content, s->allocated += EXPAND_STEP * s->itemSize)) == NULL) {
 			exit(1);
@@ -74,6 +78,15 @@ inline void checkSetNext(DynamicArray *s, char const *c, uint8_t amount) {
 	}
 	if (amount) { snext(s, c, amount); }
 }
+
+static inline void checkSetNextV(DynamicArray *s, char const c) {
+	checkSetNext(s, &c, 1);
+}
+
+static inline void checkSetNextP(DynamicArray *s, char const *c) {
+	checkSetNext(s, c, strlen(c));
+}
+
 
 char *checkGetNext(DynamicArray *s) {
 	if (s->index + s->itemSize >= s->allocated) {
@@ -88,3 +101,6 @@ char *checkGetNext(DynamicArray *s) {
 
 #define append(s, c) checkSetNext((s), (char const *) (c), (s)->itemSize)
 #define appendPartial(s, c, i) checkSetNext((s), (char const *) (c), (i))
+
+
+#endif // DYNAMIC_ARRAY_H

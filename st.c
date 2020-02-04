@@ -180,12 +180,13 @@ struct NormalModeState {
 	// Operation:
 	struct OperationState {
 		enum Operation {
-			noop,
-			visual,
-			visualLine,
-			yank
+			noop = ' ',
+			visual = 'v',
+			visualLine = 'V',
+			yank = 'y'
 		} op;
 		Position startPosition;
+		uint8_t inner;
 	} command;
 	// Motions:
 	struct MotionState {
@@ -199,6 +200,9 @@ struct NormalModeState {
 		bool finished;
 	} motion;
 } stateNormalMode;
+
+/// Default state if no operation is performed.
+struct NormalModeState defaultNormalMode = {{0,0,0}, {noop, {0, 0, 0}, false}, {0, none, {0, 0, 0}, false}};
 
 
 DynamicArray searchString =  UTF8_ARRAY;
@@ -1346,11 +1350,10 @@ void printSearchString() {
 	displayString(&searchString, &g, term.row - 2);
 }
 
-/// Default state if no operation is performed.
-struct NormalModeState defaultNormalMode = {{0,0,0}, {noop, {0, 0, 0}}, {0, none, {0, 0, 0}, false}};
 
 void enableMode(enum Operation o) {
 	stateNormalMode.command.op = o;
+	stateNormalMode.command.inner = 0;
 	stateNormalMode.command.startPosition.x = term.c.x;
 	stateNormalMode.command.startPosition.y = term.c.y;
 	stateNormalMode.command.startPosition.yScr = term.scr;
@@ -1409,20 +1412,23 @@ bool contains (char ksym, char const * values, uint32_t amount) {
 }
 
 
-void terminateCommand(bool abort) {
-	stateNormalMode.command = defaultNormalMode.command; //< clear command + motion
+void terminateCommand(bool abort, bool both) {
+	bool const exitMotion = both || (stateNormalMode.motion.search == none);
 	stateNormalMode.motion  = defaultNormalMode.motion;
-	selclear();                                          //< clear selection if any
-
-	if (!abort) { toggle = !toggle; }
-	empty(currentCommand);
+	
+	if (exitMotion) {
+		stateNormalMode.command = defaultNormalMode.command;
+		selclear();
+		if (!abort) { toggle = !toggle; }
+		empty(currentCommand);
+	}
 
 	printCommandString();
 	printSearchString();
 	//tsetdirt(0, term.row-3);
 }
-inline void exitCommand() { terminateCommand(false); }
-inline void abortCommand() { terminateCommand(true); }
+static inline void exitCommand(bool motion) { terminateCommand(false, motion); }
+static inline void abortCommand() { terminateCommand(true, true); }
 
 /// Go to next occurrence of string relative to the current location
 /// conduct search, starting at start pos
@@ -1431,6 +1437,7 @@ gotoString(int8_t sign) {
 	uint32_t findIndex = 0;
 	uint32_t searchStringSize = size(&searchString);
 	uint32_t const maxIteration = (HISTSIZE + term.row) * term.col + searchStringSize;  //< one complete traversal.
+	moveLetter(sign);
 	for (uint32_t cIteration = 0; findIndex < searchStringSize
 			&& cIteration ++ < maxIteration; moveLetter(sign)) {
 		uint32_t const searchChar = *((uint32_t*)(sign == 1 ? view(&searchString, findIndex)
@@ -1482,7 +1489,7 @@ highlightStringOnScreen() {
 	}
 }
 
-void gotoStringAndHighlight(int8_t sign) {
+bool gotoStringAndHighlight(int8_t sign) {
 	bool const found = gotoString(sign);  //< find the next string to the current position
 	empty(&highlights);             //< remove previous highlights
 	if (found) {                          //< apply new highlights if found
@@ -1493,51 +1500,151 @@ void gotoStringAndHighlight(int8_t sign) {
 	}
 	tsetdirt(0, term.row-3);              //< repaint everything except for the status bar, which
 	                                      //  is painted separately.
+	return found;
 }
 
-void pressKeys(char const* nullTerminatedString) {
-	size_t end;
-	for (size_t i = 0, end=strlen(nullTerminatedString); i < end; ++i) {
+bool pressKeys(char const* nullTerminatedString, size_t end) {
+        bool succ = true;
+	for (size_t i = 0; i < end && succ; ++i) {
 		if (nullTerminatedString[i] == '\n') {
-			kpressNormalMode(&nullTerminatedString[i], 0, false, true, false);
+			succ = kpressNormalMode(&nullTerminatedString[i], 0, false, true, false);
 		} else {
-			kpressNormalMode(&nullTerminatedString[i], 1, false, false, false);
+			succ = kpressNormalMode(&nullTerminatedString[i], 1, false, false, false);
 		}
 	}
+	return succ;
 }
 
-void executeCommand(DynamicArray const *command) {
-	size_t end;
+bool executeCommand(DynamicArray const *command) {
+	size_t end=size(command);
 	char decoded [32];
-	for (size_t i = 0, end=size(command); i < end; ++i) {
+	bool success = true;
+	for (size_t i = 0; i < end && success; ++i) {
 		size_t len = utf8encode(*((Rune*)view(command, i)) , decoded);
-		kpressNormalMode(decoded, len, false, false, false);
+		success = kpressNormalMode(decoded, len, false, false, false);
 	}
+	return success;
 	//kpressNormalMode(NULL, 0, false, true, false);
 }
 
-void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace) {
+struct {
+	char const first; 
+	char const second;
+} const Brackets [] = {
+	{'(', ')'},
+	{'<', '>'},
+	{'{', '}'},
+	{'[', ']'},
+};
+
+
+/// Emits Command prefix and suffix when i motion is performed (e.g. yiw).
+/// 
+/// @param c:             motion character
+/// @param expandMode:    1 for 'i', 2 for 'a'
+/// @param first, second: Dynamic arrays in which the prefix and postfix
+///                       commands will be returned
+/// @return               whether the command could be extracted successfully. 
+bool expandExpression(char const c, char expandMode, 
+		DynamicArray *first, DynamicArray *second) {
+	empty(first);
+	empty(second);
+	// Motions
+	char const lower = tolower(c);
+	if (lower == 'w') {
+		// translated into wb[command]e resp. WB[command]E, which works
+		// file even when at the fist letter. Does not work for single
+		// letter words though.
+		int const diff = c - lower;
+		checkSetNextV(first, c);
+		checkSetNextV(first, (signed char)(((int)'b') + diff));
+		checkSetNextV(second, (signed char)(((int)'e') + diff));
+		return true;
+	}
+	// Symmetrical brackets (quotation marks)
+	if (c == '\'' || c == '"') {
+		if (TLINE(term.c.y)[term.c.x].u  == c) {
+			// Local ambiguity -> do nothing. It cannot be
+			// determined if the current character is the first
+			// character of the selection or the second one.
+			//  <---- search here? -- ['] -- or search here? --->
+			return false;
+		}
+		// ?[c]\nl
+		char res [] = {'?', c, '\n'};
+		checkSetNextP(first, res);
+		checkSetNextV(expandMode == 1 ? first : second, 'l');
+		res[0] = '/';
+		checkSetNextP(second, res);
+		if (expandMode == 1) { checkSetNextV(second, 'h'); }
+		return true;
+	}
+	// Brackets: Does not if in range / if the brackets belong togehter.
+	for (int pid = 0; pid < sizeof(Brackets); ++pid) {
+		if(Brackets[pid].first == c || Brackets[pid].second == c) {
+			if (TLINE(term.c.y)[term.c.x].u  == Brackets[pid].first) {
+				checkSetNextV(first, 'l');
+			}
+			checkSetNextV(first, '?');
+			checkSetNextV(first, Brackets[pid].first);
+			checkSetNextV(first, '\n');
+			checkSetNextV(expandMode == 1 ? first : second, 'l');
+			checkSetNextV(second, '/');
+			checkSetNextV(second, Brackets[pid].second);
+			checkSetNextV(second, '\n');
+			if (expandMode == 1) { checkSetNextV(second, 'h'); }
+			return true;
+		}
+	}
+	// search string
+	// complicated search operation: <tag>
+	if (c == 't') {
+		// XXX: (Bug in vim: @vit )
+		// <tag_name attr="hier" a2="\<sch\>"> [current pos] </tag_name>
+		
+		// 1. Copy history ( tag := hist[?<\n:/ \n] )
+		// 2. Copy history ( first_find := hist[?<\n: next place in 
+		//                   history where count '>' > count '<'
+		//                   (can be behind current pos) )
+		// 3. first := [?first_find][#first_ind]l
+		//    second:= [/tag">"]h
+		//return true; // XXX: not implmented yet.
+	}
+	return false;
+}
+
+
+
+bool kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace) {
 	// [ESC] or [ENTER] abort resp. finish the current operation or
 	// the Normal Mode if no operation is currently executed.
 	// #softEsc i acts like esc in case no operation is currently performed.
 	bool const softEsc = (len == 1 && ksym[0] == 'i');
 	if (esc || enter || softEsc) {
-		if (stateNormalMode.command.op == noop
+		if (stateNormalMode.command.op == yank) {
+			printf("\nyank\n");
+			// copy
+			selextend(term.c.x, term.c.y, term.scr, sel.mode, 0);
+			xsetsel(getsel());
+			xclipcopy();
+			applyPosition(&stateNormalMode.command.startPosition);
+			exitCommand(true);
+		} else if (stateNormalMode.command.op == noop
 				&& stateNormalMode.motion.search == none
 				&& stateNormalMode.motion.amount == 0) {
-			terminateCommand(!enter);
+			terminateCommand(!enter, true);
 			empty(&highlights);
 			tfulldirt(); // < this also removes the search string and the last command.
 			normalMode(NULL);
-			return;
+			return true;
 		} else if (!softEsc) {
 			if (enter && stateNormalMode.motion.search != none && !isEmpty(&searchString)) {
-				exitCommand(); //stateNormalMode.motion.finished = true;
-				return;
+				exitCommand(false);
+				return true;
 			} else {
 				abortCommand();
 			}
-			return;
+			return true;
 		}
 	} //< ! (esc || enter)
 	// Search: append to search string & conduct search for best hit, starting at start pos,
@@ -1554,7 +1661,7 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 				empty(&highlights);
 				stateNormalMode.motion = defaultNormalMode .motion; //< if typed once more than there are
 				selclear();                                         //  letters, the search motion is
-				return;                                             //  terminated
+				return true;                                             //  terminated
 			}
 			applyPosition(&stateNormalMode.motion.searchPosition);
 		} else {
@@ -1566,9 +1673,8 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 				utf8decode(ksym, (Rune*)(kCommand), len);
 			}
 		}
-		if (sign == -1) { moveLetter(1); }
-		gotoStringAndHighlight(sign); //< go to the next occurrence of the string and highlight
-		                              //  all occurrences currently on screen
+		//if (sign == -1) { moveLetter(1); }
+		bool const result = gotoStringAndHighlight(sign);
 
 		if (stateNormalMode.command.op == visual) {
 			selextend(term.c.x, term.c.y, term.scr, sel.type, 0);
@@ -1577,19 +1683,70 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 		}
 		printCommandString();
 		printSearchString();
-		return;
+		return result;
 	}
 
-	if (len == 0) { return; }
+	if (len == 0) { return false; }
+
+	// 'i' mode enabled, hence the expression is to be expanded:
+	// [start_expression(ksym[0])] [operation] [stop_expression(ksym[0])]
+	if (stateNormalMode.command.inner) {
+		DynamicArray prefix = CHAR_ARRAY; 
+		DynamicArray suffix = CHAR_ARRAY; 
+		bool const found = expandExpression(ksym[0], 
+		        stateNormalMode.command.inner, &prefix, &suffix);
+		if (!found) { 
+			stateNormalMode.command.inner = 0;
+			free(prefix.content);
+			free(suffix.content);
+			return false; 
+		}
+
+		char const operation = stateNormalMode.command.op;
+		struct NormalModeState const st = stateNormalMode;
+		TCursor const tc = term.c;
+		stateNormalMode.command.op = noop;
+		stateNormalMode.command.inner = 0;
+
+		bool succ = true;
+		for (size_t i = 0; i < size(&prefix) && succ; ++i) {
+			succ = pressKeys(&prefix.content[i], 1);
+			//printf("%c", prefix.content[i]);
+		}
+		if (succ) { 
+			kpressNormalMode(&operation, 1, 0, 0, 0); 
+			//printf("%c", operation);
+		}
+		for (size_t i = 0; i < size(&suffix) && succ; ++i) {
+			succ = pressKeys(&suffix.content[i], 1);
+			//printf("%c", suffix.content[i]);
+		}
+
+		if (!succ) { // go back to the old position, apply op
+			stateNormalMode = st;
+			term.c = tc;
+			//printf("\nnot successful\n");
+		}
+
+		free(prefix.content);
+		free(suffix.content);
+		return succ;
+	}
+
+
 	// V / v or y take precedence over movement commands.
 	switch(ksym[0]) {
 		case '.':
 			{
-
 				if (!isEmpty(currentCommand)) { toggle = !toggle; empty(currentCommand); }
-				executeCommand(lastCommand);
+				return executeCommand(lastCommand);
 			}
-			return;
+		case 'i': 
+			stateNormalMode.command.inner = 1;
+			return true;
+		case 'a': 
+			stateNormalMode.command.inner = 2;
+			return true;
 		case 'y': //< Yank mode
 			{
 				char* kCommand = checkGetNext(currentCommand);
@@ -1604,7 +1761,7 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 					case visual:
 						xsetsel(getsel());     //< yank
 						xclipcopy();
-						exitCommand();         //< reset command
+						exitCommand(true);         //< reset command
 						break;
 					case yank:           //< Complete yank operation as in y#amount j
 						selstart(0, term.c.y, term.scr, 0);
@@ -1614,12 +1771,12 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 						xsetsel(getsel());
 						xclipcopy();
 						term.c.y = origY;
-						exitCommand();
+						exitCommand(true);
 				}
 			}
 			printCommandString();
 			printSearchString();
-			return;
+			return true;
 		case 'v':                //< Visual Mode: Toggle mode.
 		case 'V':
 			{
@@ -1638,11 +1795,12 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 					}
 				}
 			}
-			return;
+			return true;
 	}
 	// Perform the movement.
 	int32_t sign = -1;    //< whehter a command goes 'forward' (1) or 'backward' (-1)
 	bool discard = false; //< discard input, as it does not have a meaning.
+	bool success = true;
 	switch(ksym[0]) {
 		case 'j': sign = 1;
 		case 'k':
@@ -1699,7 +1857,7 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 								break;
 							}
 		case '/': sign = 1;
-		case '?':
+		case '?': 
 							empty(&searchString);
 							stateNormalMode.motion.search = sign == 1 ? forward : backward;
 							stateNormalMode.motion.searchPosition.x = term.c.x;
@@ -1715,10 +1873,10 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 								stateNormalMode.motion.search = forward;
 								stateNormalMode.motion.finished = true;
 							}
-							for (int32_t amount = MAX(stateNormalMode.motion.amount, 1); amount > 0; amount--) {
-								if (stateNormalMode.motion.search == backward) { sign *= -1; }
-								moveLetter(sign);
-								gotoStringAndHighlight(sign);
+							if (stateNormalMode.motion.search == backward) { sign *= -1; }
+							for (int32_t amount = MAX(stateNormalMode.motion.amount, 1); success && amount > 0; amount--) {
+								//moveLetter(sign);
+								success = gotoStringAndHighlight(sign);
 							}
 							break;
 		case 't':
@@ -1744,7 +1902,7 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 	if (discard) {
 		for (size_t i = 0; i < amountNormalModeShortcuts; ++i) {
 			if (ksym[0] == normalModeShortcuts[i].key) {
-				pressKeys(normalModeShortcuts[i].value);
+				success = pressKeys(normalModeShortcuts[i].value, strlen(normalModeShortcuts[i].value));
 			}
 		}
 	} else {
@@ -1788,17 +1946,18 @@ void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, boo
 				empty(currentCommand);
 			}
 			if (stateNormalMode.command.op == yank) {
-				if (!isNumber && !discard) {
+				if (!isNumber && !discard && stateNormalMode.motion.search == none) {
 					// copy
 					selextend(term.c.x, term.c.y, term.scr, sel.mode, 0);
 					xsetsel(getsel());
 					xclipcopy();
 					applyPosition(&stateNormalMode.command.startPosition);
-					exitCommand();
+					exitCommand(true);
 				}
 			}
 		}
 	}
+	return success;
 }
 
 void
@@ -2963,7 +3122,7 @@ tputc(Rune u)
 {
 	char c[UTF_SIZ];
 	int control;
-	int width, len;
+	int width = 0, len;
 	Glyph *gp;
 
 	control = ISCONTROL(u);
