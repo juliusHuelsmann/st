@@ -1499,9 +1499,9 @@ void pressKeys(char const* nullTerminatedString) {
 	size_t end;
 	for (size_t i = 0, end=strlen(nullTerminatedString); i < end; ++i) {
 		if (nullTerminatedString[i] == '\n') {
-			kpressNormalMode(&nullTerminatedString[i], 0, false, true, false, false);
+			kpressNormalMode(&nullTerminatedString[i], 0, false, true, false);
 		} else {
-			kpressNormalMode(&nullTerminatedString[i], 1, false, false, false, false);
+			kpressNormalMode(&nullTerminatedString[i], 1, false, false, false);
 		}
 	}
 }
@@ -1511,16 +1511,12 @@ void executeCommand(DynamicArray const *command) {
 	char decoded [32];
 	for (size_t i = 0, end=size(command); i < end; ++i) {
 		size_t len = utf8encode(*((Rune*)view(command, i)) , decoded);
-		kpressNormalMode(decoded, len, false, false, false, false);
+		kpressNormalMode(decoded, len, false, false, false);
 	}
-	//kpressNormalMode(NULL, 0, false, true, false, false);
+	//kpressNormalMode(NULL, 0, false, true, false);
 }
 
-void kpressNormalMode(char const * ksym, uint32_t len, 
-		bool esc, bool enter, bool backspace, bool ctrl) {
-	printf("%c %d %d\n", ksym[0], len, ctrl);
-
-
+void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace) {
 	// [ESC] or [ENTER] abort resp. finish the current operation or 
 	// the Normal Mode if no operation is currently executed.
 	if (esc || enter) {
@@ -1543,7 +1539,7 @@ void kpressNormalMode(char const * ksym, uint32_t len,
 	} //< ! (esc || enter)
 	// Search: append to search string & conduct search for best hit, starting at start pos,
 	//         highlighting all other occurrences on the current page if one is found.
-	if (stateNormalMode.motion.search != none && !stateNormalMode.motion.finished && !ctrl) {
+	if (stateNormalMode.motion.search != none && !stateNormalMode.motion.finished) {
 		int8_t const sign = stateNormalMode.motion.search == forward ? 1 : -1;
 		// Apply start position.
 		if (backspace) { // XXX: if a quantifier is subject to removal, it is currently only removed 
@@ -1583,71 +1579,67 @@ void kpressNormalMode(char const * ksym, uint32_t len,
 
 	if (len == 0) { return; }
 	// V / v or y take precedence over movement commands.
-	if (!ctrl) {
-		switch(ksym[0]) {
-			case '.':
-				{
+	switch(ksym[0]) {
+		case '.':
+			{
 
-					if (!isEmpty(currentCommand)) { toggle = !toggle; empty(currentCommand); }
-					executeCommand(lastCommand);
-				}	
-				return;
-			case 'y': //< Yank mode
-				{
+				if (!isEmpty(currentCommand)) { toggle = !toggle; empty(currentCommand); }
+				executeCommand(lastCommand);
+			}	
+			return;
+		case 'y': //< Yank mode
+			{
+				char* kCommand = checkGetNext(currentCommand);
+				utf8decode(ksym, (Rune*)(kCommand), len);
+				switch(stateNormalMode.command.op) {
+					case noop:           //< Start yank mode & set #op
+						enableMode(yank);
+						selstart(term.c.x, term.c.y, term.scr, 0);
+						empty(currentCommand);
+						break;
+					case visualLine:     //< Complete yank operation
+					case visual:
+						xsetsel(getsel());     //< yank
+						xclipcopy();
+						exitCommand();         //< reset command
+						break;
+					case yank:           //< Complete yank operation as in y#amount j
+						selstart(0, term.c.y, term.scr, 0);
+						uint32_t const origY = term.c.y;
+						for (int32_t i = 0; i < MAX(stateNormalMode.motion.amount, 1) - 1; i ++) moveLine(1);
+						selextend(term.col-1, term.c.y, term.scr, SEL_RECTANGULAR, 0);
+						xsetsel(getsel());
+						xclipcopy();
+						term.c.y = origY;
+						exitCommand();
+				}
+			}
+			printCommandString();
+			printSearchString();
+			return;
+		case 'v':                //< Visual Mode: Toggle mode.
+		case 'V':
+			{
+				enum Operation mode = ksym[0] == 'v' ? visual : visualLine;
+				bool assign = stateNormalMode.command.op != mode;
+				abortCommand();
+				if (assign) {
+					enableMode(mode);
 					char* kCommand = checkGetNext(currentCommand);
 					utf8decode(ksym, (Rune*)(kCommand), len);
-					switch(stateNormalMode.command.op) {
-						case noop:           //< Start yank mode & set #op
-							enableMode(yank);
-							selstart(term.c.x, term.c.y, term.scr, 0);
-							empty(currentCommand);
-							break;
-						case visualLine:     //< Complete yank operation
-						case visual:
-							xsetsel(getsel());     //< yank
-							xclipcopy();
-							exitCommand();         //< reset command
-							break;
-						case yank:           //< Complete yank operation as in y#amount j
-							selstart(0, term.c.y, term.scr, 0);
-							uint32_t const origY = term.c.y;
-							for (int32_t i = 0; i < MAX(stateNormalMode.motion.amount, 1) - 1; i ++) moveLine(1);
-							selextend(term.col-1, term.c.y, term.scr, SEL_RECTANGULAR, 0);
-							xsetsel(getsel());
-							xclipcopy();
-							term.c.y = origY;
-							exitCommand();
+					if (mode == visualLine) {
+						selstart(0, term.c.y, term.scr, 0);
+						selextend(term.col-1, term.c.y, term.scr, SEL_RECTANGULAR, 0);
+					} else {
+						selstart(term.c.x, term.c.y, term.scr, 0);
 					}
 				}
-				printCommandString();
-				printSearchString();
-				return;
-			case 'v':                //< Visual Mode: Toggle mode.
-			case 'V':
-				{
-					enum Operation mode = ksym[0] == 'v' ? visual : visualLine;
-					bool assign = stateNormalMode.command.op != mode;
-					abortCommand();
-					if (assign) {
-						enableMode(mode);
-						char* kCommand = checkGetNext(currentCommand);
-						utf8decode(ksym, (Rune*)(kCommand), len);
-						if (mode == visualLine) {
-							selstart(0, term.c.y, term.scr, 0);
-							selextend(term.col-1, term.c.y, term.scr, SEL_RECTANGULAR, 0);
-						} else {
-							selstart(term.c.x, term.c.y, term.scr, 0);
-						}
-					}
-				}
-				return;
-		}
+			}
+			return;
 	}
 	// Perform the movement.
 	int32_t sign = -1;    //< whehter a command goes 'forward' (1) or 'backward' (-1)
 	bool discard = false; //< discard input, as it does not have a meaning.
-
-
 	switch(ksym[0]) {
 		case 'j': sign = 1;
 		case 'k': 
@@ -1678,11 +1670,7 @@ void kpressNormalMode(char const * ksym, uint32_t len,
 		case 'E': sign = 1;
 		case 'B':
 		case 'b':
-							if (ctrl) { // page down
-								printf("page down\n");
-
-
-							} else {
+							{
 								bool const startSpaceIsSeparator = !(ksym[0] == 'w' || ksym[0] == 'W');
 								bool const capital = ksym[0] <= 90; //< defines the word separators to use 
 								char const * const wDelim = capital ? wordDelimLarge : wordDelimSmall; 
@@ -1738,15 +1726,6 @@ void kpressNormalMode(char const * ksym, uint32_t len,
 							}
 							tsetdirt(sel.nb.y, sel.ne.y);
 							discard = true;
-							break;
-		case 'f':
-							if (ctrl) { // page up
-								printf("page up\n");
-
-							} else {
-								discard = true;
-							}
-							break;
 		default:
 							discard = true;
 	}

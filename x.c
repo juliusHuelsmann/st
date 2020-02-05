@@ -1819,10 +1819,8 @@ kpress(XEvent *ev)
 
 	len = XmbLookupString(xw.xic, e, buf, sizeof buf, &ksym, &status);
 	if (IS_SET(MODE_NORMAL)) {
-		// need to pass ksym aswell. XXX: move the kpressNormalMode to this file (x.c), issue calls
-		// to sub functions in order to avoid ksym clutter.
 		kpressNormalMode(buf, strlen(buf), 
-				ksym == XK_Escape, ksym == XK_Return, ksym == XK_BackSpace, match(e->state, ControlMask));
+				ksym == XK_Escape, ksym == XK_Return, ksym == XK_BackSpace);
 		return;
 	}
 
