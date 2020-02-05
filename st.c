@@ -193,12 +193,6 @@ static uchar utfmask[UTF_SIZ + 1] = {0xC0, 0x80, 0xE0, 0xF0, 0xF8};
 static Rune utfmin[UTF_SIZ + 1] = {       0,    0,  0x80,  0x800,  0x10000};
 static Rune utfmax[UTF_SIZ + 1] = {0x10FFFF, 0x7F, 0x7FF, 0xFFFF, 0x10FFFF};
 
-void applyPosition(Position const *pos) {
-	term.c.x = pos->x;
-	term.c.y = pos->y;
-	term.scr = pos->yScr;
-}
-
 ssize_t
 xwrite(int fd, const char *s, size_t len)
 {
@@ -384,11 +378,6 @@ tlinelen(int y)
 		--i;
 
 	return i;
-}
-
-void 
-xselstart(int col, int row, int snap) {
-	selstart(col, row, term.scr, snap);
 }
 
 void

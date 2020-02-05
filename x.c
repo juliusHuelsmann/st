@@ -755,6 +755,19 @@ normalMode(Arg const *_) {
 	win.mode ^= MODE_NORMAL;
 }
 
+void
+xloadalpha(void)
+{
+    /* set alpha value of bg color */
+    if (opt_alpha)
+        alpha = strtof(opt_alpha, NULL);
+
+    float const usedAlpha = focused ? alpha : alphaUnfocussed;
+
+    dc.col[defaultbg].color.alpha = (unsigned short)(0xffff * usedAlpha);
+    dc.col[defaultbg].pixel &= 0x00FFFFFF;
+    dc.col[defaultbg].pixel |= (unsigned char)(0xff * usedAlpha) << 24;
+}
 
 void
 xloadcols(void)

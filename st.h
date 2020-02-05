@@ -71,6 +71,7 @@ void die(const char *, ...);
 void redraw(void);
 void draw(void);
 
+void externalpipe(const Arg *);
 int currentLine(int, int);
 void kscrolldown(const Arg *);
 void kscrollup(const Arg *);
@@ -126,11 +127,3 @@ extern float alpha;
 extern float alphaUnfocussed;
 extern char wordDelimSmall[];
 extern char wordDelimLarge[];
-
-typedef struct NormalModeShortcuts {
-	char key;
-	char *value;
-} NormalModeShortcuts;
-
-extern NormalModeShortcuts normalModeShortcuts[];
-extern size_t const amountNormalModeShortcuts;
