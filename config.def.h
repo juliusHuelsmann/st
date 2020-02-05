@@ -155,49 +155,12 @@ static unsigned int mousebg = 0;
  * doesn't match the ones requested.
  */
 static unsigned int defaultattr = 11;
-/// Highlight color
-static unsigned int highlightBg = 160; //1; //8;
+/// Colors for the entities that are highlighted in normal mode.
+static unsigned int highlightBg = 160;
 static unsigned int highlightFg = 15;
-/// Current line
+/// Colors for the line and column that is marked 'current' in normal mode.
 static unsigned int currentBg = 0;
 static unsigned int currentFg = 15;
-
-
-/// Xresources preferences to load at startup
-ResourcePref resources[] = {
-		{ "font",         STRING,  &font },
-		{ "color0",       STRING,  &colorname[0] },
-		{ "color1",       STRING,  &colorname[1] },
-		{ "color2",       STRING,  &colorname[2] },
-		{ "color3",       STRING,  &colorname[3] },
-		{ "color4",       STRING,  &colorname[4] },
-		{ "color5",       STRING,  &colorname[5] },
-		{ "color6",       STRING,  &colorname[6] },
-		{ "color7",       STRING,  &colorname[7] },
-		{ "color8",       STRING,  &colorname[8] },
-		{ "color9",       STRING,  &colorname[9] },
-		{ "color10",      STRING,  &colorname[10] },
-		{ "color11",      STRING,  &colorname[11] },
-		{ "color12",      STRING,  &colorname[12] },
-		{ "color13",      STRING,  &colorname[13] },
-		{ "color14",      STRING,  &colorname[14] },
-		{ "color15",      STRING,  &colorname[15] },
-		{ "alpha",        FLOAT,  &alpha},
-		{ "alphaUnfocussed",FLOAT,  &alphaUnfocussed },
-		{ "background",   STRING,  &colorname[256] },
-		{ "foreground",   STRING,  &colorname[257] },
-		{ "cursorColor",  STRING,  &colorname[258] },
-		{ "termname",     STRING,  &termname },
-		{ "shell",        STRING,  &shell },
-		{ "xfps",         INTEGER, &xfps },
-		{ "actionfps",    INTEGER, &actionfps },
-		{ "blinktimeout", INTEGER, &blinktimeout },
-		{ "bellvolume",   INTEGER, &bellvolume },
-		{ "tabspaces",    INTEGER, &tabspaces },
-		{ "borderpx",     INTEGER, &borderpx },
-		{ "cwscale",      FLOAT,   &cwscale },
-		{ "chscale",      FLOAT,   &chscale },
-};
 
 /*
  * Internal mouse shortcuts.
@@ -218,15 +181,14 @@ static char *openurlcmd[] = { "/bin/sh", "-c",
 /* Internal keyboard shortcuts. */
 #define MODKEY Mod1Mask
 #define AltMask Mod1Mask
-#define TERMMOD (AltMask|ShiftMask)
-#define CTRLMOD (AltMask|ShiftMask)
-
+#define TERMMOD (ControlMask|ShiftMask)
 
 static Shortcut shortcuts[] = {
 	{ AltMask,              XK_c,      normalMode, {.i = 0}},
 	// external pipe
 	{ TERMMOD, XK_u, externalpipe, { .v = openurlcmd } },
 	/* mask                 keysym          function        argument */
+	{ AltMask,              XK_c,           normalMode,     {.i =  0} },
 	{ XK_ANY_MOD,           XK_Break,       sendbreak,      {.i =  0} },
 	{ AltMask,          XK_Print,       toggleprinter,  {.i =  0} },
 	{ ShiftMask,            XK_Print,       printscreen,    {.i =  0} },
@@ -243,10 +205,8 @@ static Shortcut shortcuts[] = {
 	{ TERMMOD,              XK_Y,           selpaste,       {.i =  0} },
 	{ ShiftMask,            XK_Insert,      selpaste,       {.i =  0} },
 	{ TERMMOD,              XK_Num_Lock,    numlock,        {.i =  0} },
-	{ TERMMOD,          XK_K,     kscrollup,      {.i = -1} },
-	{ TERMMOD,          XK_J,   kscrolldown,    {.i = -1} },
-	{ AltMask,          XK_k,     kscrollup,      {.i = 1} },
-	{ AltMask,          XK_j,   kscrolldown,    {.i = 1} },
+	{ ShiftMask,            XK_Page_Up,     kscrollup,      {.i = -1} },
+	{ ShiftMask,            XK_Page_Down,   kscrolldown,    {.i = -1} },
 };
 
 /*
@@ -526,6 +486,7 @@ static char ascii_printable[] =
 	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
 	"`abcdefghijklmnopqrstuvwxyz{|}~";
 
+
 /// word sepearors normal mode
 char wordDelimSmall[] = " \t!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 char wordDelimLarge[] = " \t"; /// <Word sepearors normal mode (capital W)
@@ -543,3 +504,9 @@ struct NormalModeShortcuts normalModeShortcuts [] = {
 };
 
 size_t const amountNormalModeShortcuts = sizeof(normalModeShortcuts) / sizeof(*normalModeShortcuts);
+
+/// Style of the command string visualized in normal mode in the right corner.
+Glyph const styleCommand = {'c', ATTR_ITALIC | ATTR_FAINT, 7, 0};
+
+/// Style of the search string visualized in normal mode in the right corner.
+Glyph const styleSearch = {'c', ATTR_ITALIC | ATTR_BOLD_FAINT, 7, 0};

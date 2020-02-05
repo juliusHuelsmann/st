@@ -750,30 +750,11 @@ xloadcolor(int i, const char *name, Color *ncolor)
 }
 
 void
-normalMode(Arg const *_)  //< the argument is just for the sake of 
-                          //  adhering to the function format. 
-{
-	win.mode ^= MODE_NORMAL; //< toggle normal mode via exclusive or.
-	if (win.mode & MODE_NORMAL) {
-		onNormalModeStart();
-	} else {
-		onNormalModeStop();
-	}
+normalMode(Arg const *_) {
+	(void) _;
+	win.mode ^= MODE_NORMAL;
 }
 
-void
-xloadalpha(void)
-{
-    /* set alpha value of bg color */
-    if (opt_alpha)
-        alpha = strtof(opt_alpha, NULL);
-
-    float const usedAlpha = focused ? alpha : alphaUnfocussed;
-
-    dc.col[defaultbg].color.alpha = (unsigned short)(0xffff * usedAlpha);
-    dc.col[defaultbg].pixel &= 0x00FFFFFF;
-    dc.col[defaultbg].pixel |= (unsigned char)(0xff * usedAlpha) << 24;
-}
 
 void
 xloadcols(void)
@@ -1532,6 +1513,11 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 		g.fg = currentFg;
 	} 
 
+	if ((g.mode & ATTR_CURRENT) && (win.mode & MODE_NORMAL)) {
+		g.bg = currentBg;
+		g.fg = currentFg;
+	}
+
 	/* draw the new one */
 	if (IS_SET(MODE_FOCUSED)) {
 		switch (win.cursor) {
@@ -1623,8 +1609,8 @@ xdrawline(Line line, int x1, int y1, int x2)
 			new.mode ^= ATTR_REVERSE;
 		if (highlighted(x, y1)) {
 			new.mode ^= ATTR_HIGHLIGHT;
-		} 
-    if (currentLine(x, y1)) {
+		}
+		if (currentLine(x, y1)) {
 			new.mode ^= ATTR_CURRENT;
 		}
 		if (i > 0 && ATTRCMP(base, new)) {
@@ -1819,9 +1805,11 @@ kpress(XEvent *ev)
 
 	len = XmbLookupString(xw.xic, e, buf, sizeof buf, &ksym, &status);
 	if (IS_SET(MODE_NORMAL)) {
-		kpressNormalMode(buf, strlen(buf), 
-				ksym == XK_Escape, ksym == XK_Return, ksym == XK_BackSpace);
-		return;
+		ExitState const es = kpressNormalMode(buf, strlen(buf),
+				match(ControlMask, e->state), ksym == XK_Escape,
+			       	ksym == XK_Return, ksym == XK_BackSpace); 
+		if (es == finished) { normalMode(NULL); } 
+		return; //if (es != failed) { return; }
 	}
 
 	/* 1. shortcuts */

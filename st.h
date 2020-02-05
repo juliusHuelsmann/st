@@ -1,6 +1,8 @@
 /* See LICENSE for license details. */
 
-#include <stdbool.h>
+#include "glyph.h"
+#include "normalMode.h"
+
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -47,11 +49,6 @@ enum selection_mode {
 	SEL_READY = 2
 };
 
-enum selection_type {
-	SEL_REGULAR = 1,
-	SEL_RECTANGULAR = 2
-};
-
 enum selection_snap {
 	SNAP_WORD = 1,
 	SNAP_LINE = 2
@@ -61,18 +58,6 @@ typedef unsigned char uchar;
 typedef unsigned int uint;
 typedef unsigned long ulong;
 typedef unsigned short ushort;
-
-typedef uint_least32_t Rune;
-
-#define Glyph Glyph_
-typedef struct {
-	Rune u;           /* character code */
-	ushort mode;      /* attribute flags */
-	uint32_t fg;      /* foreground  */
-	uint32_t bg;      /* background  */
-} Glyph;
-
-typedef Glyph *Line;
 
 typedef union {
 	int i;
@@ -86,15 +71,11 @@ void die(const char *, ...);
 void redraw(void);
 void draw(void);
 
-void externalpipe(const Arg *);
-int highlighted(int, int);
 int currentLine(int, int);
 void kscrolldown(const Arg *);
 void kscrollup(const Arg *);
-void kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace);
 void normalMode(Arg const *);
-void onNormalModeStart();
-void onNormalModeStop();
+
 void printscreen(const Arg *);
 void printsel(const Arg *);
 void sendbreak(const Arg *);
@@ -104,6 +85,8 @@ int tattrset(int);
 void tnew(int, int);
 void tresize(int, int);
 void tsetdirtattr(int);
+size_t utf8decode(const char *, Rune *, size_t);
+void tsetdirt(int, int);
 void ttyhangup(void);
 int ttynew(char *, char *, char *, char **);
 size_t ttyread(void);
