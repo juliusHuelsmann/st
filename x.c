@@ -730,15 +730,9 @@ xloadcolor(int i, const char *name, Color *ncolor)
 }
 
 void
-normalMode(Arg const *_)  //< the argument is just for the sake of
-                          //  adhering to the function format.
-{
-	win.mode ^= MODE_NORMAL; //< toggle normal mode via exclusive or.
-	if (win.mode & MODE_NORMAL) {
-		onNormalModeStart();
-	} else {
-		onNormalModeStop();
-	}
+normalMode(Arg const *_) {
+	(void) _;
+	win.mode ^= MODE_NORMAL;
 }
 
 
@@ -1579,7 +1573,7 @@ xdrawline(Line line, int x1, int y1, int x2)
 		if (highlighted(x, y1)) {
 			new.mode ^= ATTR_HIGHLIGHT;
 		}
-    if (currentLine(x, y1)) {
+		if (currentLine(x, y1)) {
 			new.mode ^= ATTR_CURRENT;
 		}
 		if (i > 0 && ATTRCMP(base, new)) {
@@ -1764,9 +1758,11 @@ kpress(XEvent *ev)
 
 	len = XmbLookupString(xw.xic, e, buf, sizeof buf, &ksym, &status);
 	if (IS_SET(MODE_NORMAL)) {
-		kpressNormalMode(buf, strlen(buf),
-				ksym == XK_Escape, ksym == XK_Return, ksym == XK_BackSpace);
-		return;
+		ExitState const es = kpressNormalMode(buf, strlen(buf),
+				match(ControlMask, e->state), ksym == XK_Escape,
+			       	ksym == XK_Return, ksym == XK_BackSpace); 
+		if (es == finished) { normalMode(NULL); } 
+		return; //if (es != failed) { return; }
 	}
 
 	/* 1. shortcuts */
@@ -1908,9 +1904,8 @@ run(void)
 				XNextEvent(xw.dpy, &ev);
 				if (XFilterEvent(&ev, None))
 					continue;
-				if (handler[ev.type]) {
+				if (handler[ev.type])
 					(handler[ev.type])(&ev);
-				}
 			}
 
 			draw();

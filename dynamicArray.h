@@ -62,7 +62,7 @@ empty(DynamicArray* s) { s->index = 0; }
 static inline bool
 isEmpty(DynamicArray* s) { return s->index == 0; }
 
-static inline uint32_t
+static inline int
 size(DynamicArray const * s) { return s->index / s->itemSize; }
 
 static inline void
@@ -88,7 +88,7 @@ static inline void checkSetNextP(DynamicArray *s, char const *c) {
 }
 
 
-char *checkGetNext(DynamicArray *s) {
+static char *checkGetNext(DynamicArray *s) {
 	if (s->index + s->itemSize >= s->allocated) {
 		if ((s->content = (char *)realloc(
 						s->content, s->allocated += EXPAND_STEP * s->itemSize)) == NULL) {

@@ -1,6 +1,8 @@
 /* See LICENSE for license details. */
 
-#include <stdbool.h>
+#include "glyph.h"
+#include "normalMode.h"
+
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -11,8 +13,6 @@
 #define BETWEEN(x, a, b)	((a) <= (x) && (x) <= (b))
 #define DIVCEIL(n, d)		(((n) + ((d) - 1)) / (d))
 #define DEFAULT(a, b)		(a) = (a) ? (a) : (b)
-#define INTERVAL(x, a, b)		(x) < (a) ? (a) : (x) > (b) ? (b) : (x)
-#define INTERVAL_DIFF(x, a, b)		(x) < (a) ? (x) - (a) : (x) > (b) ? (x) - (b) : 0
 #define LIMIT(x, a, b)		(x) = (x) < (a) ? (a) : (x) > (b) ? (b) : (x)
 #define ATTRCMP(a, b)		((a).mode != (b).mode || (a).fg != (b).fg || \
 				(a).bg != (b).bg)
@@ -47,11 +47,6 @@ enum selection_mode {
 	SEL_READY = 2
 };
 
-enum selection_type {
-	SEL_REGULAR = 1,
-	SEL_RECTANGULAR = 2
-};
-
 enum selection_snap {
 	SNAP_WORD = 1,
 	SNAP_LINE = 2
@@ -61,18 +56,6 @@ typedef unsigned char uchar;
 typedef unsigned int uint;
 typedef unsigned long ulong;
 typedef unsigned short ushort;
-
-typedef uint_least32_t Rune;
-
-#define Glyph Glyph_
-typedef struct {
-	Rune u;           /* character code */
-	ushort mode;      /* attribute flags */
-	uint32_t fg;      /* foreground  */
-	uint32_t bg;      /* background  */
-} Glyph;
-
-typedef Glyph *Line;
 
 typedef union {
 	int i;
@@ -85,14 +68,11 @@ void die(const char *, ...);
 void redraw(void);
 void draw(void);
 
-int highlighted(int, int);
 int currentLine(int, int);
 void kscrolldown(const Arg *);
 void kscrollup(const Arg *);
-bool kpressNormalMode(char const * ksym, uint32_t len, bool esc, bool enter, bool backspace);
 void normalMode(Arg const *);
-void onNormalModeStart();
-void onNormalModeStop();
+
 void printscreen(const Arg *);
 void printsel(const Arg *);
 void sendbreak(const Arg *);
@@ -102,6 +82,8 @@ int tattrset(int);
 void tnew(int, int);
 void tresize(int, int);
 void tsetdirtattr(int);
+size_t utf8decode(const char *, Rune *, size_t);
+void tsetdirt(int, int);
 void ttyhangup(void);
 int ttynew(char *, char *, char *, char **);
 size_t ttyread(void);
@@ -125,8 +107,6 @@ void *xmalloc(size_t);
 void *xrealloc(void *, size_t);
 char *xstrdup(char *);
 
-
-
 /* config.h globals */
 extern char *utmp;
 extern char *stty_args;
@@ -137,26 +117,3 @@ extern char *termname;
 extern unsigned int tabspaces;
 extern unsigned int defaultfg;
 extern unsigned int defaultbg;
-extern char wordDelimSmall[];
-extern char wordDelimLarge[];
-
-typedef struct NormalModeShortcuts {
-	char key;
-	char *value;
-} NormalModeShortcuts;
-
-extern NormalModeShortcuts normalModeShortcuts[];
-extern size_t const amountNormalModeShortcuts;
-
-/*[OP]i[Letter] <=> [Letter-start-target][OP][Ltter-stop-target]
-typedef struct {
-	char a;
-	char c;
-} keyCounterparts = {
-	{ '(', ')', "?" },
-	{ '<', '>' },
-	{ '{', '}' },
-	{ '[', ']' },
-	
-};
-*/
