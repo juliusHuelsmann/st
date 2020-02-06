@@ -17,7 +17,7 @@
 static void reportError(char const * cond, char const * stt, char const * file,
 		unsigned int line ) {
 	unsigned int const maxErrorCount = 100;
-	static int errorCount = 0;
+	static unsigned int errorCount = 0;
 	if (++errorCount == 1) {
 		printf("Report the following bug to "
 				"https://github.com/juliusHuelsmann/st.\n");

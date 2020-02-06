@@ -704,26 +704,22 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 			case XK_f:
 			{
 				int const diff = MAX(term.row - 2, 1);
-				for (term.scr -= diff; term.scr < 0;
-						term.scr += HISTSIZE);
+				term.scr = MAX(term.scr - diff, 0);
 				term.c.y = 0;
 				break;
 			}
 			case XK_b:
 			{	
 				int const diff = MAX(term.row - 2, 1);
-				term.scr = (term.scr + diff) % HISTSIZE;
+				term.scr = MIN(term.scr + diff, HISTSIZE);
 				term.c.y = term.bot;
 				break;
 			}
-			case XK_u: // Half screen up
-				while ((term.scr -= sign * term.row / 2) < 0) {
-					term.scr += HISTSIZE;
-				}
+			case XK_u:
+				term.scr = MIN(term.scr + term.row/2, HISTSIZE);
 				break;
-			case XK_d: // Half screen down
-				term.scr += sign * term.row / 2;
-				term.scr %= HISTSIZE;
+			case XK_d:
+				term.scr = MAX(term.scr - term.row / 2, 0);
 				break;
 			default:
 				return false;
