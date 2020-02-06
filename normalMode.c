@@ -10,6 +10,9 @@
 #include <limits.h>
 #include <math.h>
 
+#include <X11/keysym.h>
+#include <X11/XKBlib.h>
+
 #define MIN(a, b)		((a) < (b) ? (a) : (b))
 #define MAX(a, b)		((a) < (b) ? (b) : (a))
 #define LEN(a)			(sizeof(a) / sizeof(a)[0])
@@ -366,12 +369,11 @@ static bool gotoStringAndHighlight(int8_t sign) {
 }
 
 static bool pressKeys(char const* nullTerminatedString, size_t end) {
-        bool succ = true;
-	for (size_t i = 0; i < end && succ; ++i) {
-		succ = kpressNormalMode(&nullTerminatedString[i], 1, false,
-				false, nullTerminatedString[i] == '\n', false);
+        bool sc = true;
+	for (size_t i = 0; i < end && sc; ++i) {
+		sc = kpressNormalMode(&nullTerminatedString[i], 1, false, NULL);
 	}
-	return succ;
+	return sc;
 }
 
 static bool executeCommand(DynamicArray const *command) {
@@ -383,8 +385,7 @@ static bool executeCommand(DynamicArray const *command) {
 		char const *const nextRune = view(command, i);
 		if (nextRune == NULL) { return false; }
 		len = utf8encode(*((Rune *) nextRune), decoded);
-		succ = kpressNormalMode(decoded, len, false,
-				false, len == 1 && decoded[0]=='\n', false);
+		succ = kpressNormalMode(decoded, len, false, NULL);
 	}
 	return succ;
 }
@@ -467,7 +468,7 @@ static bool expandExpression(char const c, enum Infix expandMode,
 	if (c == 't') {
 		// XXX: (Bug in vim: @vit )
 		// <tag_name attr="hier" a2="\<sch\>"> [current pos] </tag_name>
-		
+
 		// 1. Copy history ( tag := hist[?<\n:/ \n] )
 		// 2. Copy history ( first_find := hist[?<\n: next place in
 		//                   history where count '>' > count '<'
@@ -518,11 +519,17 @@ highlighted(int x, int y)
 }
 
 ExitState
-kpressNormalMode(char const * ksym, int len, bool ctrl, bool esc, bool enter,
-		bool backspace) {
+kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
+
+	bool const kNull = vsym == NULL;
+	KeySym const * const ksym = (KeySym*) vsym;
+	bool const esc = kNull ? false : *ksym == XK_Escape;
+	bool const enter = kNull ? len==1 && cs[0] == '\n' : *ksym == XK_Return;
+	bool const backspace = kNull ? false : *ksym == XK_BackSpace;
+
 	// [ESC] or [ENTER] abort resp. finish the current level of operation.
 	// Typing 'i' if no operation is currently performed behaves like ESC.
-	if (esc || enter || (len == 1 && ksym[0] == 'i' && isMotionFinished()
+	if (esc || enter || (len == 1 && cs[0] == 'i' && isMotionFinished()
 				&& isOperationFinished())) {
 		if (terminateCommand(!enter) ) {
 			applyPosition(&stateNormalMode.initialPosition);
@@ -551,13 +558,13 @@ kpressNormalMode(char const * ksym, int len, bool ctrl, bool esc, bool enter,
 				empty(&searchString);
 				return true;
 			}
-			utf8decode(ksym, (Rune*)(kSearch), len);
+			utf8decode(cs, (Rune*)(kSearch), len);
 			char* kCommand = expand(currentCommand);
 			if (kCommand == NULL) {
 				empty(currentCommand);
 				return true;
 			}
-			utf8decode(ksym, (Rune*)(kCommand), len);
+			utf8decode(cs, (Rune*)(kCommand), len);
 		}
 		applyPosition(&stateNormalMode.motion.searchPosition);
 		bool const result = gotoStringAndHighlight(sign);
@@ -575,11 +582,11 @@ kpressNormalMode(char const * ksym, int len, bool ctrl, bool esc, bool enter,
 	if (len == 0) { return failed; }
 
 	// 'i' mode enabled, hence the expression is to be expanded:
-	// [start_expression(ksym[0])] [operation] [stop_expression(ksym[0])]
+	// [start_expression(cs[0])] [operation] [stop_expression(cs[0])]
 	if (stateNormalMode.command.infix != infix_none) {
 		DynamicArray prefix = CHAR_ARRAY;
 		DynamicArray suffix = CHAR_ARRAY;
-		bool const found = expandExpression(ksym[0],
+		bool const found = expandExpression(cs[0],
 		        stateNormalMode.command.infix, &prefix, &suffix);
 		if (!found) {
 			stateNormalMode.command.infix = infix_none;
@@ -599,7 +606,7 @@ kpressNormalMode(char const * ksym, int len, bool ctrl, bool esc, bool enter,
 			succ = pressKeys(&prefix.content[i], 1);
 		}
 		if (succ) {
-			kpressNormalMode(&operation, 1, false, 0, 0, 0);
+			kpressNormalMode(&operation, 1, false, NULL);
 		}
 		for (int i = 0; i < size(&suffix) && succ; ++i) {
 			succ = pressKeys(&suffix.content[i], 1);
@@ -617,7 +624,7 @@ kpressNormalMode(char const * ksym, int len, bool ctrl, bool esc, bool enter,
 
 
 	// V / v or y take precedence over movement commands.
-	switch(ksym[0]) {
+	switch(cs[0]) {
 		case '.':
 		{
 			if (!isEmpty(currentCommand)) { toggle = !toggle; empty(currentCommand); }
@@ -636,7 +643,7 @@ kpressNormalMode(char const * ksym, int len, bool ctrl, bool esc, bool enter,
 				empty(currentCommand);
 				return true;
 			}
-			utf8decode(ksym, (Rune*)(kCommand), len);
+			utf8decode(cs, (Rune*)(kCommand), len);
 			switch(stateNormalMode.command.op) {
 				case noop:           //< Start yank mode & set #op
 					enableOperation(yank);
@@ -666,7 +673,7 @@ kpressNormalMode(char const * ksym, int len, bool ctrl, bool esc, bool enter,
 		case 'v':                //< Visual Mode: Toggle mode.
 		case 'V':
 		{
-			enum Operation op = ksym[0] == 'v' ? visual : visualLine;
+			enum Operation op = cs[0] == 'v' ? visual : visualLine;
 			bool assign = stateNormalMode.command.op != op;
 			abortCommand();
 			if (assign) {
@@ -676,7 +683,7 @@ kpressNormalMode(char const * ksym, int len, bool ctrl, bool esc, bool enter,
 					empty(currentCommand);
 					return true;
 				}
-				utf8decode(ksym, (Rune*)(kCommand), len);
+				utf8decode(cs, (Rune*)(kCommand), len);
 				if (op == visualLine) {
 					selstart(0, term.c.y, term.scr, 0);
 					selextend(term.col-1, term.c.y, term.scr, SEL_RECTANGULAR, 0);
@@ -688,29 +695,41 @@ kpressNormalMode(char const * ksym, int len, bool ctrl, bool esc, bool enter,
 		}
 	}
 	// Perform the movement.
-	int32_t sign = -1;    //< whether a command goes 'forward' (1) or 'backward' (-1)
+	int32_t sign = -1;    //< if command goes 'forward'(1) or 'backward'(-1)
 	bool discard = false; //< discard input, as it does not have a meaning.
 	bool cmdSuccessful = true;
 	if (ctrl) {
-		switch(ksym[0]) {
-			case 'f':
-			case 'b':
+		if (ksym == NULL) { return false; }
+		switch(*ksym) {
+			case XK_f:
+			{
+				int const diff = MAX(term.row - 2, 1);
+				for (term.scr -= diff; term.scr < 0;
+						term.scr += HISTSIZE);
+				term.c.y = 0;
 				break;
-			case 'u': // Half screen up
+			}
+			case XK_b:
+			{	
+				int const diff = MAX(term.row - 2, 1);
+				term.scr = (term.scr + diff) % HISTSIZE;
+				term.c.y = term.bot;
+				break;
+			}
+			case XK_u: // Half screen up
 				while ((term.scr -= sign * term.row / 2) < 0) {
 					term.scr += HISTSIZE;
 				}
 				break;
-			case 'd': // Half screen down
+			case XK_d: // Half screen down
 				term.scr += sign * term.row / 2;
 				term.scr %= HISTSIZE;
 				break;
 			default:
-				discard = true;
+				return false;
 		}
-
 	} else {
-		switch(ksym[0]) {
+		switch(cs[0]) {
 			case 'j': sign = 1; FALLTHROUGH
 			case 'k':
 				  term.c.y += sign * MAX(stateNormalMode.motion.amount,1);
@@ -747,12 +766,12 @@ kpressNormalMode(char const * ksym, int len, bool ctrl, bool esc, bool enter,
 			case 'B': FALLTHROUGH
 			case 'b':
 				{
-					  char const * const wDelim = ksym[0] <= 90
+					  char const * const wDelim = cs[0] <= 90
 						  ? wordDelimLarge : wordDelimSmall;
 					  uint32_t const wDelimLen = strlen(wDelim);
 
 					  bool const startSpaceIsSeparator =
-						  !(ksym[0] == 'w' || ksym[0] == 'W');
+						  !(cs[0] == 'w' || cs[0] == 'W');
 					  // Whether to start & end with offset:
 					  bool const performOffset = startSpaceIsSeparator;
 					  // Max iteration := One complete hist traversal.
@@ -812,18 +831,18 @@ kpressNormalMode(char const * ksym, int len, bool ctrl, bool esc, bool enter,
 				  break;
 		}
 	}
-	bool const isNumber = len == 1 && BETWEEN(ksym[0], 48, 57);
+	bool const isNumber = len == 1 && BETWEEN(cs[0], 48, 57);
 	if (isNumber) { //< record numbers
 		discard = false;
 		stateNormalMode.motion.amount =
-			MIN(SHRT_MAX, stateNormalMode.motion.amount * 10 + ksym[0] - 48);
+			MIN(SHRT_MAX, stateNormalMode.motion.amount * 10 + cs[0] - 48);
 	} else if (!discard) {
 		stateNormalMode.motion.amount = 0;
 	}
 
 	if (discard) {
 		for (size_t i = 0; i < amountNormalModeShortcuts; ++i) {
-			if (ksym[0] == normalModeShortcuts[i].key) {
+			if (cs[0] == normalModeShortcuts[i].key) {
 				cmdSuccessful = pressKeys(normalModeShortcuts[i].value, strlen(normalModeShortcuts[i].value));
 			}
 		}
@@ -835,7 +854,7 @@ kpressNormalMode(char const * ksym, int len, bool ctrl, bool esc, bool enter,
 				empty(currentCommand);
 				return true;
 			}
-			utf8decode(ksym, (Rune*)(kCommand), len);
+			utf8decode(cs, (Rune*)(kCommand), len);
 		}
 
 		int diff = 0;

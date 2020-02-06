@@ -28,9 +28,9 @@ void onMove(void);
 int highlighted(int, int);
 
 /// Handles keys in normal mode.
-ExitState kpressNormalMode(
-		char const * ksym, int len, bool ctrlPressed,
-		bool esc, bool enter, bool backspace);
+ExitState kpressNormalMode(char const * decoded, int len, bool ctrlPressed,
+		void const * ksym);
+		//bool esc, bool enter, bool backspace, void* keysym);
 
 
 #endif // NORMAL_MODE_H
