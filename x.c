@@ -1819,9 +1819,9 @@ kpress(XEvent *ev)
 	len = XmbLookupString(xw.xic, e, buf, sizeof buf, &ksym, &status);
 	if (IS_SET(MODE_NORMAL)) {
 		ExitState const es = kpressNormalMode(buf, strlen(buf),
-				match(ControlMask, e->state), ksym == XK_Escape,
-			       	ksym == XK_Return, ksym == XK_BackSpace); 
-		if (es == finished) { normalMode(NULL); } 
+				match(ControlMask, e->state),
+				&ksym);
+		if (es == finished) { normalMode(NULL); }
 		return; //if (es != failed) { return; }
 	}
 
