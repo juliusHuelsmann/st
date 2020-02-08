@@ -13,11 +13,24 @@
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
 
-#define MIN(a, b)		((a) < (b) ? (a) : (b))
-#define MAX(a, b)		((a) < (b) ? (b) : (a))
-#define LEN(a)			(sizeof(a) / sizeof(a)[0])
-#define BETWEEN(x, a, b)	((a) <= (x) && (x) <= (b))
-#define FALLTHROUGH		__attribute__((fallthrough));
+#define LEN(a)                 (sizeof(a) / sizeof(a)[0])
+#define BETWEEN(x, a, b)       ((a) <= (x) && (x) <= (b))
+#define FALLTHROUGH            __attribute__((fallthrough));
+#define SEC(var,ini,h,r)       var = ini; if (!var) { h; return r; }
+#define EXPAND(v1,v2,r)        char *SEC(v1, expand(v2), empty(v2), true)
+
+static inline int intervalDiff(int v, int a, int b) {
+	return (v < a) ? (v - a) : ((v > b) ? (v - b) : 0);
+}
+
+static inline void swap(DynamicArray *const a, DynamicArray *const b) {
+	DynamicArray tmp = *a;
+	*a = *b;
+	*b = tmp;
+}
+
+static inline int max(int a, int b) { return a > b ? a : b; }
+static inline int min(int a, int b) { return a < b ? a : b; }
 
 //
 // Interface to the terminal
@@ -88,7 +101,7 @@ NormalModeState defaultNormalMode = {
 };
 
 /// Default state if no operation is performed.
-NormalModeState stateNormalMode = {
+NormalModeState stateVB = {
 	{0,0,0},
 	{noop, {0, 0, 0}, false},
 	{0, none, {0, 0, 0}, true}
@@ -132,14 +145,32 @@ applyPosition(Position const *pos) {
 
 static inline int
 getSearchDirection(void) {
-	return stateNormalMode.motion.search == forward ? 1 : -1;
+	return stateVB.motion.search == forward ? 1 : -1;
+}
+
+//  Utilities for working with the current version of the scrollback patch.
+
+static bool moveLine(int32_t const amount) {
+	int32_t const reqShift = intervalDiff(term.c.y+=amount, 0, term.row-1);
+	term.c.y -= reqShift;
+	int32_t const sDiff = intervalDiff(term.scr-=reqShift, 0, HISTSIZE-1);
+	term.scr -= sDiff;
+	return sDiff == 0;
+}
+
+static void moveLetter(int32_t const amount) {
+	int32_t value = (term.c.x += amount) / term.col;
+	if (value -= (term.c.x < 0)) {
+		term.c.x = moveLine(value) ? mod(term.c.x, term.col)
+			: max(min(term.c.x,term.col), 0);
+	}
 }
 
 //
 // `Private` functions:
 //
 
-// Fuctions: Temporarily display string on screen .
+// Fuctions: Temporarily display string on screen.
 
 ///
 /// Display string at end of a specified line without writing it into the bufer.
@@ -161,7 +192,7 @@ static void displayString(DynamicArray const *str, Glyph *g, int yPos) {
 		return;
 	}
 	// Determine the dimensions of used chunk of screen.
-	uint32_t const overrideSize = MIN(size(str),
+	uint32_t const overrideSize = min(size(str),
 			term.col / maxFractionOverridden);               // (1)
 	uint32_t const overrideEnd = term.col - 1;
 	// Has to follow trivially hence th assert:
@@ -169,14 +200,11 @@ static void displayString(DynamicArray const *str, Glyph *g, int yPos) {
 	assert(overrideSize <= overrideEnd + 1);
 	uint32_t const overrideStart = 1 + overrideEnd - overrideSize;
 
-	Line line = malloc(sizeof(Glyph) * overrideSize);
-	assert(str->index - 1 >=  overrideSize - 1); //< triv. from (1).
-	if (line == NULL) { return; }
+	Line SEC(line, malloc(sizeof(Glyph) * overrideSize),,)
 
 	for (uint32_t lineIdx = 0; lineIdx < overrideSize; ++lineIdx) {
 		line[lineIdx] = *g;
-		char* end = viewEnd(str, overrideSize - lineIdx - 1);
-		if (end == NULL) { break; }
+		char * SEC(end, viewEnd(str, overrideSize - lineIdx - 1),,)
 		memcpy(&line[lineIdx].u, end, str->itemSize);
 	}
 	xdrawline(TLINE(yPos), 0, yPos, overrideStart);
@@ -199,30 +227,43 @@ static inline void printSearchString(void) {
 // NormalMode Operation / Motion utilies.
 
 
-static inline void enableOperation(enum Operation o) {
-	stateNormalMode.command.op = o;
-	stateNormalMode.command.infix = infix_none;
-	stateNormalMode.command.startPosition.x = term.c.x;
-	stateNormalMode.command.startPosition.y = term.c.y;
-	stateNormalMode.command.startPosition.yScr = term.scr;
-}
-
 static inline bool isMotionFinished(void) {
-	return stateNormalMode.motion.finished;
+	return stateVB.motion.finished;
 }
 
 static inline void finishMotion(void) {
-	stateNormalMode.motion.finished = true;
+	stateVB.motion.finished = true;
 }
 
 static inline bool isOperationFinished(void) {
-	return stateNormalMode.command.op == noop
-		&& stateNormalMode.command.infix == infix_none;
+	return stateVB.command.op == noop
+		&& stateVB.command.infix == infix_none;
+}
+
+/// Register that the current comamnd is finished and a new command is lgoged
+static inline  void startNewCommand(bool abort) {
+	if (!abort) { toggle = !toggle; }
+	empty(currentCommand);
 }
 
 static inline void finishOperation(void) {
-	stateNormalMode.command = defaultNormalMode.command;
+	stateVB.command = defaultNormalMode.command;
 	assert(isOperationFinished());
+	// After an operation is finished, the selection has to be released and
+	// no highlights are to be released.
+	selclear();
+	empty(&highlights);
+	// THe command string is reset for a new command.
+	startNewCommand(true);
+}
+
+static inline void enableOperation(enum Operation o) {
+	finishOperation();
+	stateVB.command.op = o;
+	stateVB.command.infix = infix_none;
+	stateVB.command.startPosition.x = term.c.x;
+	stateVB.command.startPosition.y = term.c.y;
+	stateVB.command.startPosition.yScr = term.scr;
 }
 
 /// @param abort: If enabled, the command exits without registering
@@ -236,12 +277,6 @@ static bool terminateCommand(bool abort) {
 	if (exitOperation) {
 		exitNormalMode = isOperationFinished();
 		finishOperation();
-		selclear();
-
-		empty(currentCommand);
-		if (!abort) { toggle = !toggle; }
-
-		empty(&highlights);
 	}
 	printCommandString();
 	printSearchString();
@@ -252,69 +287,26 @@ static inline void exitCommand(void) { terminateCommand(false); }
 
 static inline void abortCommand(void) { terminateCommand(true); }
 
-static void moveLine(int8_t sign) {
-	if (sign == -1) {
-		if (term.c.y-- == 0) {
-			if (++term.scr == HISTSIZE) {
-				term.c.y = term.row - 1;
-				term.scr = 0;
-			} else {
-				term.c.y = 0;
-			}
-		}
-	} else {
-		term.c.x = 0;
-		if (++term.c.y == term.row) {
-			if (term.scr-- == 0) {
-				term.c.y = 0;
-				term.scr = HISTSIZE - 1;
-			} else {
-				term.c.y = term.row - 1;
-			}
-		}
-	}
-}
-
-static void moveLetter(int8_t sign) {
-	term.c.x += sign;
-	if (!BETWEEN(term.c.x, 0, term.col-1)) {
-		if (term.c.x < 0) {
-			term.c.x = term.col - 1;
-			moveLine(sign);
-		} else {
-			term.c.x = 0;
-			moveLine(sign);
-		}
-	}
-}
-
 /// Go to next occurrence of string relative to the current location
 /// conduct search, starting at start pos
-static bool
-gotoString(int8_t sign) {
+static bool gotoString(int8_t sign) {
+	moveLetter(sign);
 	uint32_t const searchStrSize = size(&searchString);
 	uint32_t const maxIter = (HISTSIZE+term.row) * term.col + searchStrSize;
 	uint32_t findIdx = 0;
 	for (uint32_t cIteration = 0; findIdx < searchStrSize
-			&& cIteration ++ < maxIter; moveLetter(sign)) {
-		char const *const next = sign==1 ? view(&searchString, findIdx)
-			: viewEnd(&searchString, findIdx);
-		if (next == NULL) { return false; }
+			&& ++cIteration <= maxIter; moveLetter(sign)) {
+		char const * const SEC(next, sign==1 
+				? view(&searchString, findIdx)
+				: viewEnd(&searchString, findIdx), , false)
 		uint32_t const searchChar = *((uint32_t*) next);
 
 		if (TLINE(term.c.y)[term.c.x].u == searchChar) { ++findIdx; }
 		else { findIdx = 0; }
 	}
 	bool const found = findIdx == searchStrSize;
-	if (found) { for (uint32_t i = 0; i < searchStrSize; i++) { moveLetter(-sign); } }
+	for (uint32_t i = 0; found && i < searchStrSize; ++i) moveLetter(-sign);
 	return found;
-}
-
-/// Find the next occurrence of a word
-static inline bool
-gotoNextString(int8_t sign) {
-	moveLetter(sign);
-	return gotoString(sign);
 }
 
 /// Highlight all found strings on the current screen.
@@ -327,8 +319,7 @@ highlightStringOnScreen(void) {
 	bool success = true;
 	for (int y = 0; y < term.row && success; y++) {
 		for (int x = 0; x < term.col && success; x++) {
-			char const * const next = view(&searchString, findIdx);
-			if (next == NULL) { return; }
+			char const* const SEC(next,view(&searchString,findIdx),,)
 
 			if (TLINE(y)[x].u == *((uint32_t*)(next))) {
 				if (++findIdx == 1) {
@@ -361,7 +352,7 @@ static bool gotoStringAndHighlight(int8_t sign) {
 	if (found) {
 		highlightStringOnScreen();
 	} else {
-		applyPosition(&stateNormalMode.motion.searchPosition);
+		applyPosition(&stateVB.motion.searchPosition);
 	}
 	tsetdirt(0, term.row-3);              //< repaint everything except for the status bar, which
 	                                      //  is painted separately.
@@ -382,8 +373,7 @@ static bool executeCommand(DynamicArray const *command) {
 	bool succ = true;
 	size_t len;
 	for (size_t i = 0; i < end && succ; ++i) {
-		char const *const nextRune = view(command, i);
-		if (nextRune == NULL) { return false; }
+		char const *const SEC(nextRune, view(command, i),,false)
 		len = utf8encode(*((Rune *) nextRune), decoded);
 		succ = kpressNormalMode(decoded, len, false, NULL);
 	}
@@ -408,10 +398,9 @@ struct {
 /// @param first, second: Dynamic arrays in which the prefix and postfix
 ///                       commands will be returned
 /// @return               whether the command could be extracted successfully.
-static bool expandExpression(char const c, enum Infix expandMode,
-		DynamicArray *fst, DynamicArray *snd) {
-	empty(fst);
-	empty(snd);
+static bool expandExpression(char const c, enum Infix expandMode, 
+		char operation, DynamicArray *cmd) {
+	empty(cmd);
 	bool s = true; //< used in order to detect memory allocation errors.
 	char const lower = tolower(c);
 	// Motions
@@ -420,49 +409,54 @@ static bool expandExpression(char const c, enum Infix expandMode,
 		// file even when at the fist letter. Does not work for single
 		// letter words though.
 		int const diff = c - lower;
-		s = s && checkSetNextV(fst, c);
-		s = s && checkSetNextV(fst, (signed char)(((int)'b') + diff));
-		s = s && checkSetNextV(snd, (signed char)(((int)'e')+ diff));
+		s = s && checkSetNextV(cmd, c);
+		s = s && checkSetNextV(cmd, (signed char)(((int)'b') + diff));
+		s = s && checkSetNextV(cmd, operation);
+		s = s && checkSetNextV(cmd, (signed char)(((int)'e')+ diff));
 		return s;
 	}
 	// Symmetrical brackets (quotation marks)
 	if (c == '\'' || c == '"') {
+		// Local ambiguity -> do nothing. It cannot be determined if 
+		// the current char is the 1st or last char of the selection.
+		//  <---- search here? -- ['] -- or search here? --->
 		if (TLINE(term.c.y)[term.c.x].u == c) {
-			// Local ambiguity -> do nothing. It cannot be
-			// determined if the current character is the fst
-			// character of the selection or the snd one.
-			//  <---- search here? -- ['] -- or search here? --->
 			return false;
 		}
-		// ?[c]\nl
+		// Prefix
 		char res [] = {'?', c, '\n'};
-		s = s && checkSetNextP(fst, res);
-		s = s && checkSetNextV(expandMode == infix_i?fst:snd, 'l');
+		s = s && checkSetNextP(cmd, res);
+		// infix
+		bool const iffy = expandMode == infix_i;
+		if (iffy) { s = s && checkSetNextV(cmd, 'l'); }
+		s = s && checkSetNextV(cmd, operation); 
+		if (!iffy) { s = s && checkSetNextV(cmd, 'l'); }
+		// suffix
 		res[0] = '/';
-		s = s && checkSetNextP(snd, res);
-		if (expandMode == infix_i) s = s && checkSetNextV(snd, 'h');
+		s = s && checkSetNextP(cmd, res);
+		if (iffy) { s = s && checkSetNextV(cmd, 'h'); }
 		return s;
 	}
 	// Brackets: Does not if in range / if the brackets belong togehter.
 	for (size_t pid = 0; pid < sizeof(Brackets); ++pid) {
 		if(Brackets[pid].first == c || Brackets[pid].second == c) {
-			if (TLINE(term.c.y)[term.c.x].u ==Brackets[pid].first) {
-				s = s && checkSetNextV(fst, 'l');
+			if (TLINE(term.c.y)[term.c.x].u!=Brackets[pid].first) {
+				s = s && checkSetNextV(cmd, '?');
+				s = s && checkSetNextV(cmd, Brackets[pid].first);
+				s = s && checkSetNextV(cmd, '\n');
 			}
-			s = s && checkSetNextV(fst, '?');
-			s = s && checkSetNextV(fst, Brackets[pid].first);
-			s = s && checkSetNextV(fst, '\n');
-			s = s && checkSetNextV(
-					expandMode == infix_i ? fst : snd, 'l');
-			s = s && checkSetNextV(snd, '/');
-			s = s && checkSetNextV(snd, Brackets[pid].second);
-			s = s && checkSetNextV(snd, '\n');
-			if (expandMode == infix_i) {
-				s = s && checkSetNextV(snd, 'h');
-			}
+			bool const iffy = expandMode == infix_i;
+			if (iffy) { s = s && checkSetNextV(cmd, 'l'); }
+			s = s && checkSetNextV(cmd, operation); 
+			if (!iffy) { s = s && checkSetNextV(cmd, 'l'); }
+			s = s && checkSetNextV(cmd, '/');
+			s = s && checkSetNextV(cmd, Brackets[pid].second);
+			s = s && checkSetNextV(cmd, '\n');
+			if (iffy) { s = s && checkSetNextV(cmd, 'h'); }
 			return s;
 		}
-	}
+	} 
+	/**/
 	// search string
 	// complicated search operation: <tag>
 	if (c == 't') {
@@ -486,15 +480,14 @@ static bool expandExpression(char const c, enum Infix expandMode,
 
 void
 onMove(void) {
-	stateNormalMode.initialPosition.x = term.c.x;
-	stateNormalMode.initialPosition.y = term.c.y;
-	stateNormalMode.initialPosition.yScr = term.scr;
+	stateVB.initialPosition.x = term.c.x;
+	stateVB.initialPosition.y = term.c.y;
+	stateVB.initialPosition.yScr = term.scr;
 }
 
 
 int
-highlighted(int x, int y)
-{
+highlighted(int x, int y) {
 	// Compute the legal bounds for a hit:
 	int32_t const stringSize = size(&searchString);
 	int32_t xMin = x - stringSize;
@@ -520,387 +513,272 @@ highlighted(int x, int y)
 
 ExitState
 kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
-
-	bool const kNull = vsym == NULL;
 	KeySym const * const ksym = (KeySym*) vsym;
-	bool const esc = kNull ? false : *ksym == XK_Escape;
-	bool const enter = kNull ? len==1 && cs[0] == '\n' : *ksym == XK_Return;
-	bool const backspace = kNull ? false : *ksym == XK_BackSpace;
-
+	bool const esc = ksym &&  *ksym == XK_Escape;
+	bool const enter = (ksym && *ksym==XK_Return) || (len==1 &&cs[0]=='\n');
+	bool const quantifier = len == 1 && (BETWEEN(cs[0], 49, 57) 
+			|| (cs[0] == 48 && stateVB.motion.amount));
 	// [ESC] or [ENTER] abort resp. finish the current level of operation.
 	// Typing 'i' if no operation is currently performed behaves like ESC.
 	if (esc || enter || (len == 1 && cs[0] == 'i' && isMotionFinished()
 				&& isOperationFinished())) {
 		if (terminateCommand(!enter) ) {
-			applyPosition(&stateNormalMode.initialPosition);
-			stateNormalMode = defaultNormalMode;
+			applyPosition(&stateVB.initialPosition);
+			stateVB = defaultNormalMode;
 			tfulldirt();
 			return finished;
 		}
-		return success;
+		goto motionFinish;
 	}
 	// Search: append to search string, then search & highlight
-	if (stateNormalMode.motion.search != none
-			&& !stateNormalMode.motion.finished) {
-		int8_t const sign = getSearchDirection();
-		// Append or remove current letter from command & searchString.
-		if (backspace) {
+	if (stateVB.motion.search != none && !stateVB.motion.finished) {
+		if (ksym && *ksym == XK_BackSpace) {
 			if (!isEmpty(currentCommand)) { pop(currentCommand); }
 			if (!isEmpty(&searchString)) { pop(&searchString); }
 			if (isEmpty(&searchString)) {
 				exitCommand();
 				return success;
 			}
-		} else {
-			if (len < 1) { return true; }
-			char* kSearch = expand(&searchString);
-			if (kSearch == NULL) {
-				empty(&searchString);
-				return true;
-			}
+		} else if (len >= 1) {
+			EXPAND(kSearch, &searchString, true)
 			utf8decode(cs, (Rune*)(kSearch), len);
-			char* kCommand = expand(currentCommand);
-			if (kCommand == NULL) {
-				empty(currentCommand);
-				return true;
-			}
-			utf8decode(cs, (Rune*)(kCommand), len);
-		}
-		applyPosition(&stateNormalMode.motion.searchPosition);
-		bool const result = gotoStringAndHighlight(sign);
-
-		if (stateNormalMode.command.op == visual) {
-			selextend(term.c.x, term.c.y, term.scr, sel.type, 0);
-		} else if  (stateNormalMode.command.op == visualLine) {
-			selextend(term.col-1, term.c.y, term.scr, sel.type, 0);
-		}
-		printCommandString();
-		printSearchString();
-		return result ? success : failed;
+		} else { return success; }
+		applyPosition(&stateVB.motion.searchPosition);
+		gotoStringAndHighlight(getSearchDirection());
+		goto finish;
 	}
-
 	if (len == 0) { return failed; }
-
+	// Quantifiers
+	if (quantifier) {
+		stateVB.motion.amount = min(SHRT_MAX, 
+				stateVB.motion.amount * 10 + cs[0] - 48);
+		goto finish;
+	}
 	// 'i' mode enabled, hence the expression is to be expanded:
 	// [start_expression(cs[0])] [operation] [stop_expression(cs[0])]
-	if (stateNormalMode.command.infix != infix_none) {
-		DynamicArray prefix = CHAR_ARRAY;
-		DynamicArray suffix = CHAR_ARRAY;
-		bool const found = expandExpression(cs[0],
-		        stateNormalMode.command.infix, &prefix, &suffix);
-		if (!found) {
-			stateNormalMode.command.infix = infix_none;
-			free(prefix.content);
-			free(suffix.content);
-			return failed;
+	if (stateVB.command.infix != infix_none && stateVB.command.op != noop) {
+		DynamicArray cmd = CHAR_ARRAY;
+		char const operation = stateVB.command.op;
+		bool succ = expandExpression(cs[0], 
+				stateVB.command.infix, visual, &cmd);
+		if (operation == yank) {
+			succ = succ && checkSetNextV(&cmd, operation);
 		}
 
-		char const operation = stateNormalMode.command.op;
-		NormalModeState const st = stateNormalMode;
-		TCursor const tc = term.c;
-		stateNormalMode.command.op = noop;
-		stateNormalMode.command.infix = infix_none;
-
-		bool succ = true;
-		for (int i = 0; i < size(&prefix) && succ; ++i) {
-			succ = pressKeys(&prefix.content[i], 1);
-		}
+		NormalModeState const st = stateVB;
+		TCursor         const tc = term.c;
+		stateVB.command.infix    = infix_none;
 		if (succ) {
-			kpressNormalMode(&operation, 1, false, NULL);
+			stateVB.command.op = noop;
+			for (int i = 0; i < size(&cmd) && succ; ++i) {
+				succ = pressKeys(&cmd.content[i], 1);
+			}
+			if (!succ) { // go back to the old position, apply op
+				stateVB = st;
+				term.c = tc;
+			}
+			swap(&cmd, currentCommand);
 		}
-		for (int i = 0; i < size(&suffix) && succ; ++i) {
-			succ = pressKeys(&suffix.content[i], 1);
-		}
-
-		if (!succ) { // go back to the old position, apply op
-			stateNormalMode = st;
-			term.c = tc;
-		}
-
-		free(prefix.content);
-		free(suffix.content);
-		return succ ? success : failed;
+		free(cmd.content);
+		goto finishNoAppend;
 	}
-
-
-	// V / v or y take precedence over movement commands.
+	// Commands (V / v or y)
 	switch(cs[0]) {
 		case '.':
 		{
-			if (!isEmpty(currentCommand)) { toggle = !toggle; empty(currentCommand); }
-			return executeCommand(lastCommand) ? success : failed;
+			DynamicArray cmd = UTF8_ARRAY;
+			swap(&cmd, currentCommand);
+			executeCommand(&cmd) ? success : failed;
+			swap(&cmd, currentCommand);
+			goto finishNoAppend;
 		}
-		case 'i':
-			stateNormalMode.command.infix = infix_i;
-			return success;
-		case 'a':
-			stateNormalMode.command.infix = infix_a;
-			return success;
-		case 'y': //< Yank mode
-		{
-			char* kCommand = expand(currentCommand);
-			if (kCommand == NULL) {
-				empty(currentCommand);
-				return true;
-			}
-			utf8decode(cs, (Rune*)(kCommand), len);
-			switch(stateNormalMode.command.op) {
-				case noop:           //< Start yank mode & set #op
+		case 'i': stateVB.command.infix = infix_i; goto finish;
+		case 'a': stateVB.command.infix = infix_a; goto finish;
+		case 'y':
+			switch(stateVB.command.op) {
+				case noop: //< Start yank mode & set #op
 					enableOperation(yank);
-					selstart(term.c.x, term.c.y, term.scr, 0);
-					empty(currentCommand);
-					break;
-				case visualLine:     //< Complete yank operation
-				case visual:
-					xsetsel(getsel());     //< yank
-					xclipcopy();
-					exitCommand();         //< reset command
-					break;
-				case yank:           //< Complete yank operation as in y#amount j
+					selstart(term.c.x, term.c.y,term.scr,0);
+					goto finish;
+				case yank: //< Complete yank [y#amount j]
 					selstart(0, term.c.y, term.scr, 0);
 					int const origY = term.c.y;
-					for (uint32_t i = 1; i < MAX(stateNormalMode.motion.amount, 1); ++i) moveLine(1);
-					selextend(term.col-1, term.c.y, term.scr, SEL_RECTANGULAR, 0);
+					moveLine(max(stateVB.motion.amount, 1));
+					selextend(term.col-1,term.c.y,term.scr, 
+							SEL_RECTANGULAR, 0);
+					term.c.y = origY;
+					FALLTHROUGH
+				case visualLine: // Yank visual selection
+				case visual:
 					xsetsel(getsel());
 					xclipcopy();
-					term.c.y = origY;
 					exitCommand();
+					goto finish;
+				default: 
+					return failed;
 			}
-			printCommandString();
-			printSearchString();
-			return success;
-		}
-		case 'v':                //< Visual Mode: Toggle mode.
-		case 'V':
-		{
-			enum Operation op = cs[0] == 'v' ? visual : visualLine;
-			bool assign = stateNormalMode.command.op != op;
-			abortCommand();
-			if (assign) {
-				enableOperation(op);
-				char* kCommand = expand(currentCommand);
-				if (kCommand == NULL) {
-					empty(currentCommand);
-					return true;
-				}
-				utf8decode(cs, (Rune*)(kCommand), len);
-				if (op == visualLine) {
-					selstart(0, term.c.y, term.scr, 0);
-					selextend(term.col-1, term.c.y, term.scr, SEL_RECTANGULAR, 0);
-				} else {
-					selstart(term.c.x, term.c.y, term.scr, 0);
-				}
+		case visual:
+		case visualLine:
+			if (stateVB.command.op == cs[0]) { 
+				finishOperation(); 
+				return true;
+			} else {
+				enableOperation(cs[0]);
+				selstart(cs[0] == visualLine ? 0 : term.c.x, 
+						term.c.y, term.scr, 0);
+				goto finish;
 			}
-			return success;
-		}
 	}
-	// Perform the movement.
+	// CTRL Motions
 	int32_t sign = -1;    //< if command goes 'forward'(1) or 'backward'(-1)
-	bool discard = false; //< discard input, as it does not have a meaning.
-	bool cmdSuccessful = true;
 	if (ctrl) {
 		if (ksym == NULL) { return false; }
 		switch(*ksym) {
 			case XK_f:
-			{
-				int const diff = MAX(term.row - 2, 1);
-				term.scr = MAX(term.scr - diff, 0);
+				term.scr = max(term.scr - max(term.row-2,1), 0);
 				term.c.y = 0;
-				break;
-			}
+				goto finish;
 			case XK_b:
-			{	
-				int const diff = MAX(term.row - 2, 1);
-				term.scr = MIN(term.scr + diff, HISTSIZE);
+				term.scr = min(term.scr + max(term.row - 2, 1),
+						HISTSIZE);
 				term.c.y = term.bot;
-				break;
-			}
+				goto finish;
 			case XK_u:
-				term.scr = MIN(term.scr + term.row/2, HISTSIZE);
-				break;
+				term.scr = min(term.scr + term.row/2, HISTSIZE);
+				goto finish;
 			case XK_d:
-				term.scr = MAX(term.scr - term.row / 2, 0);
+				term.scr = max(term.scr - term.row / 2, 0);
 				break;
-			default:
-				return false;
+			default: return false;
 		}
-	} else {
-		switch(cs[0]) {
-			case 'j': sign = 1; FALLTHROUGH
-			case 'k':
-				  term.c.y += sign * MAX(stateNormalMode.motion.amount,1);
-				  break;
-			case 'H': term.c.y = 0;
-				  break; //< [numer]H ~ L[number]j is not supported.
-			case 'M': term.c.y = term.bot / 2;
-				  break;
-			case 'L': term.c.y = term.bot;
-				  break; //< [numer]L ~ L[number]k is not supported.
-			case 'G':  //< Differs from vim, but most useful translation.
-				  applyPosition(&stateNormalMode.initialPosition);
-				  break;
-			case 'l': sign = 1; FALLTHROUGH
-			case 'h':
-				  {
-					  int32_t const amount = term.c.x
-						  + sign * MAX(stateNormalMode.motion.amount, 1);
-					  term.c.x = amount % term.col;
-					  while (term.c.x < 0) { term.c.x += term.col; }
-					  term.c.y += floor(1.0 * amount / term.col);
-					  break;
-				  }
-			case '0':
-				  if (!stateNormalMode.motion.amount) { term.c.x = 0; }
-				  else { discard = true; }
-				  break;
-			case '$': term.c.x = term.col-1;
-				  break;
-			case 'w': FALLTHROUGH
-			case 'W': FALLTHROUGH
-			case 'e': FALLTHROUGH
-			case 'E': sign = 1; FALLTHROUGH
-			case 'B': FALLTHROUGH
-			case 'b':
-				{
-					  char const * const wDelim = cs[0] <= 90
-						  ? wordDelimLarge : wordDelimSmall;
-					  uint32_t const wDelimLen = strlen(wDelim);
+	} 
+	// Motions
+	switch(cs[0]) {
+		case 'j': sign = 1; FALLTHROUGH
+		case 'k': moveLine(max(stateVB.motion.amount,1) * sign);
+			  goto motionFinish;
+		case 'H': term.c.y = 0;
+			  goto motionFinish;
+		case 'M': term.c.y = term.bot / 2; 
+			  goto motionFinish;
+		case 'L': term.c.y = term.bot;
+			  goto motionFinish;
+		case 'G': applyPosition(&stateVB.initialPosition);
+			  goto motionFinish;
+		case 'l': sign = 1; FALLTHROUGH
+		case 'h': moveLetter(sign * max(stateVB.motion.amount,1));
+			  goto motionFinish;
+		case '0': term.c.x = 0; 
+			  goto motionFinish;
+		case '$': term.c.x = term.col-1;
+			  goto motionFinish;
+		case 'w': FALLTHROUGH
+		case 'W': FALLTHROUGH
+		case 'e': FALLTHROUGH
+		case 'E': sign = 1; FALLTHROUGH
+		case 'B': FALLTHROUGH
+		case 'b':
+		{
+			char const * const wDelim = 
+				cs[0] <= 90 ? wordDelimLarge : wordDelimSmall;
+			uint32_t const wDelimLen = strlen(wDelim);
 
-					  bool const startSpaceIsSeparator =
-						  !(cs[0] == 'w' || cs[0] == 'W');
-					  // Whether to start & end with offset:
-					  bool const performOffset = startSpaceIsSeparator;
-					  // Max iteration := One complete hist traversal.
-					  uint32_t const maxIter = (HISTSIZE+term.row) * term.col;
-					  // Doesn't work exactly as in vim: Linebreak is
-					  // counted as 'normal' separator, hence a jump can
-					  // span multiple lines here.
-					  stateNormalMode.motion.amount =
-						  MAX(stateNormalMode.motion.amount, 1);
-					  for (; stateNormalMode.motion.amount > 0; stateNormalMode.motion.amount--) {
-						  uint8_t state = 0;
-						  if (performOffset) { moveLetter(sign); }
-						  for (uint32_t cIt = 0; cIt ++ < maxIter; moveLetter(sign)) {
-							  if (startSpaceIsSeparator == contains(TLINE(term.c.y)[term.c.x].u, wDelim, wDelimLen)) {
-								  if (state == 1) {
-									  if (performOffset) { moveLetter(-sign); }
-									  break;
-								  }
-							  } else if (state == 0) { state = 1; }
-						  }
-					  }
-					  break;
-				  }
-			case '/': sign = 1; FALLTHROUGH
-			case '?':
-				  empty(&searchString);
-				  stateNormalMode.motion.search = sign == 1 ? forward : backward;
-				  stateNormalMode.motion.searchPosition.x = term.c.x;
-				  stateNormalMode.motion.searchPosition.y = term.c.y;
-				  stateNormalMode.motion.searchPosition.yScr = term.scr;
-				  stateNormalMode.motion.finished = false;
-				  break;
-			case 'n': sign = 1; FALLTHROUGH
-			case 'N':
-				  toggle = !toggle;
-				  empty(currentCommand);
-				  if (stateNormalMode.motion.search == none) {
-					  stateNormalMode.motion.search = forward;
-					  stateNormalMode.motion.finished = true;
-				  }
-				  if (stateNormalMode.motion.search == backward) { sign *= -1; }
-				  for (int32_t amount = MAX(stateNormalMode.motion.amount, 1); cmdSuccessful && amount > 0; amount--) {
-					  moveLetter(sign);
-					  cmdSuccessful = gotoStringAndHighlight(sign);
-				  }
-				  break;
-			case 't':
-				  if (sel.type == SEL_REGULAR) {
-					  sel.type = SEL_RECTANGULAR;
-				  } else {
-					  sel.type = SEL_REGULAR;
-				  }
-				  tsetdirt(sel.nb.y, sel.ne.y);
-				  break;
-			default:
-				  discard = true;
-				  break;
-		}
-	}
-	bool const isNumber = len == 1 && BETWEEN(cs[0], 48, 57);
-	if (isNumber) { //< record numbers
-		discard = false;
-		stateNormalMode.motion.amount =
-			MIN(SHRT_MAX, stateNormalMode.motion.amount * 10 + cs[0] - 48);
-	} else if (!discard) {
-		stateNormalMode.motion.amount = 0;
-	}
-
-	if (discard) {
-		for (size_t i = 0; i < amountNormalModeShortcuts; ++i) {
-			if (cs[0] == normalModeShortcuts[i].key) {
-				cmdSuccessful = pressKeys(normalModeShortcuts[i].value, strlen(normalModeShortcuts[i].value));
-			}
-		}
-	} else {
-		// Append to the current command
-		if (!ctrl) { // XXX: Currently don't store meta inf
-			char* kCommand = expand(currentCommand);
-			if (kCommand == NULL) {
-				empty(currentCommand);
-				return true;
-			}
-			utf8decode(cs, (Rune*)(kCommand), len);
-		}
-
-		int diff = 0;
-		if (term.c.y > 0) {
-			if (term.c.y > term.bot) {
-				diff = term.bot - term.c.y;
-				term.c.y = term.bot;
-			}
-		} else {
-			if (term.c.y < 0) {
-				diff = -term.c.y;
-				term.c.y = 0;
-			}
-		}
-
-		int const _newScr = term.scr + diff;
-		term.c.y = _newScr < 0 ? 0 : (_newScr >= HISTSIZE ? term.bot : term.c.y);
-		term.scr = mod(_newScr, HISTSIZE);
-
-		if (!isEmpty(&highlights)) {
-			empty(&highlights);
-			highlightStringOnScreen();
-		}
-
-		tsetdirt(0, term.row-3);
-		printCommandString();
-		printSearchString();
-
-		if (stateNormalMode.command.op == visual) {
-			selextend(term.c.x, term.c.y, term.scr, sel.type, 0);
-		} else if  (stateNormalMode.command.op == visualLine) {
-			selextend(term.col-1, term.c.y, term.scr, sel.type, 0);
-		} else {
-			if (!isNumber && (stateNormalMode.motion.search == none
-					|| stateNormalMode.motion.finished)) {
-				toggle = !toggle;
-				empty(currentCommand);
-			}
-			if (stateNormalMode.command.op == yank) {
-				if (!isNumber && !discard && stateNormalMode.motion.search == none) {
-					// copy
-					selextend(term.c.x, term.c.y, term.scr, sel.mode, 0);
-					xsetsel(getsel());
-					xclipcopy();
-					applyPosition(&stateNormalMode.command.startPosition);
-					exitCommand();
+			bool const startSpaceIsSeparator =
+				!(cs[0] == 'w' || cs[0] == 'W');
+			// Whether to start & end with offset:
+			bool const performOffset = startSpaceIsSeparator;
+			// Max iteration := One complete hist traversal.
+			uint32_t const maxIter = (HISTSIZE+term.row) * term.col;
+			// Doesn't work exactly as in vim: Linebreak is
+			// counted as 'normal' separator, hence a jump can
+			// span multiple lines here.
+			stateVB.motion.amount = max(stateVB.motion.amount, 1);
+			for (;stateVB.motion.amount>0;--stateVB.motion.amount) {
+				uint8_t state = 0;
+				if (performOffset) { moveLetter(sign); }
+				for (uint32_t cIt = 0; cIt ++ < maxIter; moveLetter(sign)) {
+					if (startSpaceIsSeparator == contains(TLINE(term.c.y)[term.c.x].u, wDelim, wDelimLen)) {
+						if (state == 1) {
+							if (performOffset) { 
+								moveLetter(-sign);
+							}
+							break;
+						}
+					} else if (state == 0) { state = 1; }
 				}
 			}
+			goto motionFinish;
+		}
+		case '/': sign = 1; FALLTHROUGH
+		case '?':
+			  empty(&searchString);
+			  stateVB.motion.search = sign == 1 ? forward : backward;
+			  stateVB.motion.searchPosition.x = term.c.x;
+			  stateVB.motion.searchPosition.y = term.c.y;
+			  stateVB.motion.searchPosition.yScr = term.scr;
+			  stateVB.motion.finished = false;
+			  goto finish;
+		case 'n': sign = 1; FALLTHROUGH
+		case 'N':
+			if (stateVB.motion.search == none) return failed;
+			if (stateVB.motion.search == backward) { sign *= -1; }
+			{
+				bool b = true; int ox = term.c.x; 
+				int oy = term.c.y ; int scr = term.scr;
+				int32_t i = max(stateVB.motion.amount, 1); 
+				for (;i>0 && (b=gotoString(sign)); --i);
+				if (!b) {
+					term.c.x = ox; term.c.y = oy;
+					term.scr = scr;
+				}
+				goto motionFinish;
+			}
+		case 't': // Toggle selection mode and set dirt.
+			  sel.type = sel.type == SEL_REGULAR
+				  ? SEL_RECTANGULAR : SEL_REGULAR;
+			  tsetdirt(sel.nb.y, sel.ne.y);
+			  goto motionFinish;
+	}
+
+	// Custom commands
+	for (size_t i = 0; i < amountNormalModeShortcuts; ++i) {
+		if (cs[0] == normalModeShortcuts[i].key) {
+			return pressKeys(normalModeShortcuts[i].value, 
+					strlen(normalModeShortcuts[i].value)) 
+					? success : failed;
 		}
 	}
-	return cmdSuccessful ? success : failed;
+
+	return failed;
+motionFinish:
+	//if (isMotionFinished() && stateVB.command.op == yank) {
+	if (stateVB.command.op == yank) {
+		selextend(term.c.x, term.c.y, term.scr, sel.type, 0);
+		xsetsel(getsel());
+		xclipcopy();
+		exitCommand();
+	}
+finish:
+	if (len == 1 && !ctrl) { // XXX: for now.
+		EXPAND(kCommand, currentCommand, true)
+		utf8decode(cs, (Rune*)(kCommand), len);
+	}
+finishNoAppend:
+	if (stateVB.command.op == visual) {
+		selextend(term.c.x, term.c.y, term.scr, sel.type, 0);
+	} else if (stateVB.command.op == visualLine) {
+		selextend(term.col-1, term.c.y, term.scr, sel.type, 0);
+	}
+
+	if (!isEmpty(&highlights)) { // XXX only has to be done if shift
+		empty(&highlights);
+		highlightStringOnScreen();
+	}
+
+	tsetdirt(0, term.row-3); // XXX: can be greately improved
+
+	printCommandString();
+	printSearchString();
+	return success;
 }
 
