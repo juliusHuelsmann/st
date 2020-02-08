@@ -296,7 +296,7 @@ static bool gotoString(int8_t sign) {
 	uint32_t findIdx = 0;
 	for (uint32_t cIteration = 0; findIdx < searchStrSize
 			&& ++cIteration <= maxIter; moveLetter(sign)) {
-		char const * const SEC(next, sign==1 
+		char const * const SEC(next, sign==1
 				? view(&searchString, findIdx)
 				: viewEnd(&searchString, findIdx), , false)
 		uint32_t const searchChar = *((uint32_t*) next);
@@ -398,7 +398,7 @@ struct {
 /// @param first, second: Dynamic arrays in which the prefix and postfix
 ///                       commands will be returned
 /// @return               whether the command could be extracted successfully.
-static bool expandExpression(char const c, enum Infix expandMode, 
+static bool expandExpression(char const c, enum Infix expandMode,
 		char operation, DynamicArray *cmd) {
 	empty(cmd);
 	bool s = true; //< used in order to detect memory allocation errors.
@@ -417,7 +417,7 @@ static bool expandExpression(char const c, enum Infix expandMode,
 	}
 	// Symmetrical brackets (quotation marks)
 	if (c == '\'' || c == '"') {
-		// Local ambiguity -> do nothing. It cannot be determined if 
+		// Local ambiguity -> do nothing. It cannot be determined if
 		// the current char is the 1st or last char of the selection.
 		//  <---- search here? -- ['] -- or search here? --->
 		if (TLINE(term.c.y)[term.c.x].u == c) {
@@ -429,7 +429,7 @@ static bool expandExpression(char const c, enum Infix expandMode,
 		// infix
 		bool const iffy = expandMode == infix_i;
 		if (iffy) { s = s && checkSetNextV(cmd, 'l'); }
-		s = s && checkSetNextV(cmd, operation); 
+		s = s && checkSetNextV(cmd, operation);
 		if (!iffy) { s = s && checkSetNextV(cmd, 'l'); }
 		// suffix
 		res[0] = '/';
@@ -447,7 +447,7 @@ static bool expandExpression(char const c, enum Infix expandMode,
 			}
 			bool const iffy = expandMode == infix_i;
 			if (iffy) { s = s && checkSetNextV(cmd, 'l'); }
-			s = s && checkSetNextV(cmd, operation); 
+			s = s && checkSetNextV(cmd, operation);
 			if (!iffy) { s = s && checkSetNextV(cmd, 'l'); }
 			s = s && checkSetNextV(cmd, '/');
 			s = s && checkSetNextV(cmd, Brackets[pid].second);
@@ -455,7 +455,7 @@ static bool expandExpression(char const c, enum Infix expandMode,
 			if (iffy) { s = s && checkSetNextV(cmd, 'h'); }
 			return s;
 		}
-	} 
+	}
 	/**/
 	// search string
 	// complicated search operation: <tag>
@@ -516,7 +516,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 	KeySym const * const ksym = (KeySym*) vsym;
 	bool const esc = ksym &&  *ksym == XK_Escape;
 	bool const enter = (ksym && *ksym==XK_Return) || (len==1 &&cs[0]=='\n');
-	bool const quantifier = len == 1 && (BETWEEN(cs[0], 49, 57) 
+	bool const quantifier = len == 1 && (BETWEEN(cs[0], 49, 57)
 			|| (cs[0] == 48 && stateVB.motion.amount));
 	// [ESC] or [ENTER] abort resp. finish the current level of operation.
 	// Typing 'i' if no operation is currently performed behaves like ESC.
@@ -550,7 +550,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 	if (len == 0) { return failed; }
 	// Quantifiers
 	if (quantifier) {
-		stateVB.motion.amount = min(SHRT_MAX, 
+		stateVB.motion.amount = min(SHRT_MAX,
 				stateVB.motion.amount * 10 + cs[0] - 48);
 		goto finish;
 	}
@@ -559,7 +559,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 	if (stateVB.command.infix != infix_none && stateVB.command.op != noop) {
 		DynamicArray cmd = CHAR_ARRAY;
 		char const operation = stateVB.command.op;
-		bool succ = expandExpression(cs[0], 
+		bool succ = expandExpression(cs[0],
 				stateVB.command.infix, visual, &cmd);
 		if (operation == yank) {
 			succ = succ && checkSetNextV(&cmd, operation);
@@ -604,7 +604,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 					selstart(0, term.c.y, term.scr, 0);
 					int const origY = term.c.y;
 					moveLine(max(stateVB.motion.amount, 1));
-					selextend(term.col-1,term.c.y,term.scr, 
+					selextend(term.col-1,term.c.y,term.scr,
 							SEL_RECTANGULAR, 0);
 					term.c.y = origY;
 					FALLTHROUGH
@@ -614,17 +614,17 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 					xclipcopy();
 					exitCommand();
 					goto finish;
-				default: 
+				default:
 					return failed;
 			}
 		case visual:
 		case visualLine:
-			if (stateVB.command.op == cs[0]) { 
-				finishOperation(); 
+			if (stateVB.command.op == cs[0]) {
+				finishOperation();
 				return true;
 			} else {
 				enableOperation(cs[0]);
-				selstart(cs[0] == visualLine ? 0 : term.c.x, 
+				selstart(cs[0] == visualLine ? 0 : term.c.x,
 						term.c.y, term.scr, 0);
 				goto finish;
 			}
@@ -651,7 +651,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 				break;
 			default: return false;
 		}
-	} 
+	}
 	// Motions
 	switch(cs[0]) {
 		case 'j': sign = 1; FALLTHROUGH
@@ -659,7 +659,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 			  goto motionFinish;
 		case 'H': term.c.y = 0;
 			  goto motionFinish;
-		case 'M': term.c.y = term.bot / 2; 
+		case 'M': term.c.y = term.bot / 2;
 			  goto motionFinish;
 		case 'L': term.c.y = term.bot;
 			  goto motionFinish;
@@ -668,7 +668,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 		case 'l': sign = 1; FALLTHROUGH
 		case 'h': moveLetter(sign * max(stateVB.motion.amount,1));
 			  goto motionFinish;
-		case '0': term.c.x = 0; 
+		case '0': term.c.x = 0;
 			  goto motionFinish;
 		case '$': term.c.x = term.col-1;
 			  goto motionFinish;
@@ -679,7 +679,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 		case 'B': FALLTHROUGH
 		case 'b':
 		{
-			char const * const wDelim = 
+			char const * const wDelim =
 				cs[0] <= 90 ? wordDelimLarge : wordDelimSmall;
 			uint32_t const wDelimLen = strlen(wDelim);
 
@@ -699,7 +699,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 				for (uint32_t cIt = 0; cIt ++ < maxIter; moveLetter(sign)) {
 					if (startSpaceIsSeparator == contains(TLINE(term.c.y)[term.c.x].u, wDelim, wDelimLen)) {
 						if (state == 1) {
-							if (performOffset) { 
+							if (performOffset) {
 								moveLetter(-sign);
 							}
 							break;
@@ -723,9 +723,9 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 			if (stateVB.motion.search == none) return failed;
 			if (stateVB.motion.search == backward) { sign *= -1; }
 			{
-				bool b = true; int ox = term.c.x; 
+				bool b = true; int ox = term.c.x;
 				int oy = term.c.y ; int scr = term.scr;
-				int32_t i = max(stateVB.motion.amount, 1); 
+				int32_t i = max(stateVB.motion.amount, 1);
 				for (;i>0 && (b=gotoString(sign)); --i);
 				if (!b) {
 					term.c.x = ox; term.c.y = oy;
@@ -743,8 +743,8 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 	// Custom commands
 	for (size_t i = 0; i < amountNormalModeShortcuts; ++i) {
 		if (cs[0] == normalModeShortcuts[i].key) {
-			return pressKeys(normalModeShortcuts[i].value, 
-					strlen(normalModeShortcuts[i].value)) 
+			return pressKeys(normalModeShortcuts[i].value,
+					strlen(normalModeShortcuts[i].value))
 					? success : failed;
 		}
 	}
