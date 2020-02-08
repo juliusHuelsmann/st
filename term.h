@@ -9,7 +9,7 @@
 
 #include <stdint.h>
 
-#define HISTSIZE      2000
+#define HISTSIZE      100
 
 typedef struct {
 	Glyph attr; /* current char attributes */

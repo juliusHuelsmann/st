@@ -487,7 +487,7 @@ struct NormalModeShortcuts normalModeShortcuts [] = {
 size_t const amountNormalModeShortcuts = sizeof(normalModeShortcuts) / sizeof(*normalModeShortcuts);
 
 /// Style of the command string visualized in normal mode in the right corner.
-Glyph const styleCommand = {'c', ATTR_ITALIC | ATTR_FAINT, 7, 0};
+Glyph const styleCommand = {'c', ATTR_ITALIC | ATTR_FAINT, 7, 258};
 
 /// Style of the search string visualized in normal mode in the right corner.
-Glyph const styleSearch = {'c', ATTR_ITALIC | ATTR_BOLD_FAINT, 7, 0};
+Glyph const styleSearch = {'c', ATTR_ITALIC | ATTR_BOLD_FAINT, 7, 258};
