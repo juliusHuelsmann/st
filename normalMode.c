@@ -278,8 +278,7 @@ static bool gotoString(int8_t sign) {
 }
 
 /// Highlight all found strings on the current screen.
-static void
-highlightStringOnScreen(void) {
+static void highlightStringOnScreen(void) {
 	if (isEmpty(&searchString)) { return; }
 	empty(&highlights);
 	uint32_t const searchStringSize = size(&searchString);
@@ -288,7 +287,6 @@ highlightStringOnScreen(void) {
 	bool success = true;
 	for (int y = 0; y < term.row && success; y++) {
 		for (int x = 0; x < term.col && success; x++) {
-
 			char const* const SEC(next,
 					view(&searchString,findIdx),,)
 			if (TLINE(y)[x].u == (Rune) *((uint32_t*)(next))) {
@@ -311,8 +309,8 @@ highlightStringOnScreen(void) {
 static bool gotoStringAndHighlight(int8_t sign) {
       	// Find hte next occurrence of the #searchString in direction #sign
 	bool const found = gotoString(sign);
-	highlightStringOnScreen();
 	if (!found) {  applyPosition(&stateVB.motion.searchPosition); }
+	highlightStringOnScreen();
 	//tsetdirt(0, term.row-3); //< everything except for the 'status bar'
 	return found;
 }
@@ -434,7 +432,6 @@ void onMove(void) {
 	stateVB.initialPosition.y = term.c.y;
 	stateVB.initialPosition.yScr = term.scr;
 }
-
 
 int highlighted(int x, int y) {
 	// Compute the legal bounds for a hit:
@@ -736,4 +733,3 @@ finishNoAppend:
 	printSearchString();
 	return success;
 }
-
