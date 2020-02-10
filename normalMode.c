@@ -79,7 +79,7 @@ NormalModeState stateVB = {
 DynamicArray searchString =  UTF8_ARRAY;
 DynamicArray commandHist0 =  UTF8_ARRAY;
 DynamicArray commandHist1 =  UTF8_ARRAY;
-DynamicArray highlights   = QWORD_ARRAY;
+DynamicArray highlights   = DWORD_ARRAY;
 
 /// History command toggle
 static bool toggle = false;
@@ -284,15 +284,17 @@ static bool gotoString(int8_t sign) {
 static void
 highlightStringOnScreen(void) {
 	if (isEmpty(&searchString)) { return; }
+	empty(&highlights);
 	uint32_t const searchStringSize = size(&searchString);
 	uint32_t findIdx = 0;
 	uint32_t xStart, yStart;
 	bool success = true;
 	for (int y = 0; y < term.row && success; y++) {
 		for (int x = 0; x < term.col && success; x++) {
+
 			char const* const SEC(next,
 					view(&searchString,findIdx),,)
-			if (TLINE(y)[x].u == *((uint32_t*)(next))) {
+			if (TLINE(y)[x].u == (Rune) *((uint32_t*)(next))) {
 				if (++findIdx == 1) {
 					xStart = x;
 					yStart = y;
@@ -301,8 +303,7 @@ highlightStringOnScreen(void) {
 					success = success
 						&& append(&highlights, &xStart)
 						&& append(&highlights, &yStart);
-					findIdx = 0;
-					term.dirty[yStart] = 1;
+					findIdx = 0; //term.dirty[yStart] = 1;
 				}
 			} else { findIdx = 0; }
 		}
@@ -314,9 +315,9 @@ static bool gotoStringAndHighlight(int8_t sign) {
       	// Find hte next occurrence of the #searchString in direction #sign
 	bool const found = gotoString(sign);
 	empty(&highlights);
-	if (found) { highlightStringOnScreen();
-	} else { applyPosition(&stateVB.motion.searchPosition); }
-	tsetdirt(0, term.row-3); //< everything except for the 'status bar'
+	highlightStringOnScreen();
+	if (!found) {  applyPosition(&stateVB.motion.searchPosition); }
+	//tsetdirt(0, term.row-3); //< everything except for the 'status bar'
 	return found;
 }
 
@@ -451,10 +452,12 @@ int highlighted(int x, int y) {
 	if (xMin < 0) { xMin = 0; }
 
 	uint32_t highSize = size(&highlights);
+	ENSURE(highSize % 2 == 0, empty(&highlights); return false;);
+	highSize /= 2;
 	uint32_t *ptr = (uint32_t*) highlights.content;
 	for (uint32_t i = 0; i < highSize; ++i) {
-		int32_t const sx = *(ptr++);
-		int32_t const sy = *(ptr++);
+		int32_t const sx = (int32_t) *(ptr++);
+		int32_t const sy = (int32_t) *(ptr++);
 		if (BETWEEN(sy, yMin, y) && (sy != yMin || sx > xMin)
 				&& (sy != y || sx <= x)) {
 			return true;
@@ -470,6 +473,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 	bool const enter = (ksym && *ksym==XK_Return) || (len==1 &&cs[0]=='\n');
 	bool const quantifier = len == 1 && (BETWEEN(cs[0], 49, 57)
 			|| (cs[0] == 48 && stateVB.motion.amount));
+	int const previousScroll = term.scr;
 	// [ESC] or [ENTER] abort resp. finish the current level of operation.
 	// Typing 'i' if no operation is currently performed behaves like ESC.
 	if (esc || enter || (len == 1 && cs[0] == 'i' && isMotionFinished()
@@ -682,17 +686,16 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 			bool b = true; int ox = term.c.x;
 			int oy = term.c.y ; int scr = term.scr;
 			int32_t i = max(stateVB.motion.amount, 1);
-			for (;i>0 && (b=gotoString(sign)); --i);
-			if (!b) {
-				term.c.x = ox; term.c.y = oy;
-				term.scr = scr;
+			for (;i>0 && (b=gotoString(sign)); --i) {
+                          oy = term.c.y; scr = term.scr;
 			}
+			if (!b) { term.c.x = ox; term.c.y = oy; term.scr = scr;}
 			goto motionFinish;
 		}
 		case 't': // Toggle selection mode and set dirt.
 			  sel.type = sel.type == SEL_REGULAR
 				  ? SEL_RECTANGULAR : SEL_REGULAR;
-			  tsetdirt(sel.nb.y, sel.ne.y);
+			  //tsetdirt(sel.nb.y, sel.ne.y);
 			  goto motionFinish;
 	}
 
@@ -727,12 +730,12 @@ finishNoAppend:
 		selextend(term.col-1, term.c.y, term.scr, sel.type, 0);
 	}
 
-	if (!isEmpty(&highlights)) { // XXX only has to be done if shift
+	if (previousScroll != term.scr && !isEmpty(&searchString)) {
 		empty(&highlights);
 		highlightStringOnScreen();
 	}
-	tsetdirt(0, term.row-3); // XXX: can be greately improved
-	
+	tsetdirt(0, term.row-3); // Required because of the cursor cross.
+
 	printCommandString();
 	printSearchString();
 	return success;
