@@ -311,7 +311,6 @@ highlightStringOnScreen(void) {
 static bool gotoStringAndHighlight(int8_t sign) {
       	// Find hte next occurrence of the #searchString in direction #sign
 	bool const found = gotoString(sign);
-	empty(&highlights);
 	highlightStringOnScreen();
 	if (!found) {  applyPosition(&stateVB.motion.searchPosition); }
 	//tsetdirt(0, term.row-3); //< everything except for the 'status bar'
@@ -730,7 +729,6 @@ finishNoAppend:
 	}
 
 	if (previousScroll != term.scr && !isEmpty(&searchString)) {
-		empty(&highlights);
 		highlightStringOnScreen();
 	}
 	tsetdirt(0, term.row-3); // Required because of the cursor cross.
