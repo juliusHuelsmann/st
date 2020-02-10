@@ -481,6 +481,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 			tfulldirt();
 			return finished;
 		}
+		len = 0;
 		goto motionFinish;
 	}
 	// Search: append to search string, then search & highlight
@@ -492,6 +493,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 				exitCommand();
 				return success;
 			}
+			len = 0;
 		} else if (len >= 1) {
 			EXPAND(kSearch, &searchString, true)
 			utf8decode(cs, (Rune*)(kSearch), len);
