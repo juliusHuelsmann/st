@@ -87,6 +87,7 @@ void tnew(int, int);
 void tresize(int, int);
 void tsetdirtattr(int);
 size_t utf8decode(const char *, Rune *, size_t);
+Rune utf8decodebyte(char, size_t *);
 void tsetdirt(int, int);
 void ttyhangup(void);
 int ttynew(char *, char *, char *, char **);

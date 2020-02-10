@@ -5,48 +5,37 @@
 #include "win.h"
 #include "error.h"
 
+#include <X11/keysym.h>
+#include <X11/XKBlib.h>
+
 #include <ctype.h>
 #include <stdio.h>
 #include <limits.h>
 #include <math.h>
-
-#include <X11/keysym.h>
-#include <X11/XKBlib.h>
 
 #define LEN(a)                 (sizeof(a) / sizeof(a)[0])
 #define BETWEEN(x, a, b)       ((a) <= (x) && (x) <= (b))
 #define FALLTHROUGH            __attribute__((fallthrough));
 #define SEC(var,ini,h,r)       var = ini; if (!var) { h; return r; }
 #define EXPAND(v1,v2,r)        char *SEC(v1, expand(v2), empty(v2), true)
-
-static inline int intervalDiff(int v, int a, int b) {
-	return (v < a) ? (v - a) : ((v > b) ? (v - b) : 0);
-}
-
-static inline void swap(DynamicArray *const a, DynamicArray *const b) {
-	DynamicArray tmp = *a;
-	*a = *b;
-	*b = tmp;
-}
-
-static inline int max(int a, int b) { return a > b ? a : b; }
-static inline int min(int a, int b) { return a < b ? a : b; }
+#define currentCommand         (toggle ? &commandHist0 : &commandHist1)
+#define lastCommand            (toggle ? &commandHist1 : &commandHist0)
 
 //
 // Interface to the terminal
-//
-
-extern Glyph const styleCommand;
-extern Glyph const styleSearch;
+extern Glyph const styleCommand, styleSearch;
 extern NormalModeShortcuts normalModeShortcuts[];
 extern size_t const amountNormalModeShortcuts;
 extern char wordDelimSmall[];
 extern char wordDelimLarge[];
+extern unsigned int fgCommandYank, fgCommandVisual, fgCommandVisualLine,
+       bgCommandYank, bgCommandVisual, bgCommandVisualLine, bgPos, fgPos;
 
 extern void selclear(void);
 extern void tsetdirt(int, int);
 extern size_t utf8encode(Rune, char *);
 extern size_t utf8decode(const char *, Rune *, size_t);
+extern size_t utf8decodebyte(char c, size_t *i);
 
 extern void selextend(int, int, int, int, int);
 extern void selstart(int, int, int, int);
@@ -55,101 +44,68 @@ extern void tfulldirt(void);
 
 //
 // `Private` structs
-//
-typedef struct {
-	uint32_t x;
-	uint32_t y;
-	uint32_t yScr;
-} Position;
+typedef struct { uint32_t x; uint32_t y; uint32_t yScr; } Position;
 
-/// The entire normal mode state, consisting of an operation
-/// and a motion.
+/// Entire normal mode state, consisting of an operation and a motion.
 typedef struct {
 	Position initialPosition;
-	// Operation:
 	struct OperationState {
 		enum Operation {
-			noop = ' ',
-			visual = 'v',
-			visualLine = 'V',
-			yank = 'y'
-		} op;
+			noop = ' ', visual='v', visualLine='V', yank = 'y' } op;
 		Position startPosition;
-		enum Infix {
-			infix_none = 0,
-			infix_i = 1,
-			infix_a = 2,
-		} infix;
+		enum Infix { infix_none = 0, infix_i = 1, infix_a = 2, } infix;
 	} command;
-	// Motions:
 	struct MotionState {
 		uint32_t amount;
-		enum Search {
-			none,
-			forward,
-			backward,
-		} search;
+		enum Search {none, forward, backward} search;
 		Position searchPosition;
 		bool finished;
 	} motion;
 } NormalModeState;
 
-NormalModeState defaultNormalMode = {
-	{0,0,0},
-	{noop, {0, 0, 0}, false},
-	{0, none, {0, 0, 0}, true}
-};
-
 /// Default state if no operation is performed.
+NormalModeState defaultNormalMode = {
+	{0,0,0},    {noop, {0, 0, 0}, false},   {0, none, {0, 0, 0}, true}
+};
 NormalModeState stateVB = {
-	{0,0,0},
-	{noop, {0, 0, 0}, false},
-	{0, none, {0, 0, 0}, true}
+	{0,0,0},    {noop, {0, 0, 0}, false},   {0, none, {0, 0, 0}, true}
 };
 
 DynamicArray searchString =  UTF8_ARRAY;
 DynamicArray commandHist0 =  UTF8_ARRAY;
 DynamicArray commandHist1 =  UTF8_ARRAY;
-DynamicArray highlights   = QWORD_ARRAY;
-
+DynamicArray highlights   = DWORD_ARRAY;
 
 /// History command toggle
-bool toggle = false;
-#define currentCommand toggle ? &commandHist0 : &commandHist1
-#define lastCommand    toggle ? &commandHist1 : &commandHist0
+static bool toggle = false;
 
 //
 // Utility functions
-//
-
-static inline int
-mod(int a, int b) {
-	for (; a < 0; a += b);
-	return a % b;
+static inline int intervalDiff(int v, int a, int b) {
+	return (v < a) ? (v - a) : ((v > b) ? (v - b) : 0);
 }
-
-static inline bool
-contains (char c, char const * values, uint32_t memSize) {
+static inline void swap(DynamicArray *const a, DynamicArray *const b) {
+	DynamicArray tmp = *a; *a = *b; *b = tmp;
+}
+static inline int max(int a, int b) { return a > b ? a : b; }
+static inline int min(int a, int b) { return a < b ? a : b; }
+static inline int mod(int a, int b) { for (; a < 0; a += b); return a % b; }
+static inline bool contains (char c, char const * values, uint32_t memSize) {
 	ENSURE(values != NULL, return false);
 	for (uint32_t i = 0; i < memSize; ++i) if (c == values[i]) return true;
 	return false;
 }
-
-static inline void
-applyPosition(Position const *pos) {
+static inline void applyPosition(Position const *pos) {
 	ENSURE(pos != NULL, return);
 	term.c.x = pos->x;
 	term.c.y = pos->y;
 	term.scr = pos->yScr;
 }
-
-static inline int
-getSearchDirection(void) {
+static inline int getSearchDirection(void) {
 	return stateVB.motion.search == forward ? 1 : -1;
 }
 
 //  Utilities for working with the current version of the scrollback patch.
-
 static bool moveLine(int32_t const amount) {
 	int32_t const reqShift = intervalDiff(term.c.y+=amount, 0, term.row-1);
 	term.c.y -= reqShift;
@@ -162,24 +118,22 @@ static void moveLetter(int32_t const amount) {
 	int32_t value = (term.c.x += amount) / term.col;
 	if (value -= (term.c.x < 0)) {
 		term.c.x = moveLine(value) ? mod(term.c.x, term.col)
-			: max(min(term.c.x,term.col), 0);
+			: max(min(term.c.x,term.col - 1), 0);
 	}
+	assert(BETWEEN(term.c.x,0,term.col-1)&&BETWEEN(term.c.y,0,term.row-1));
 }
 
 //
 // `Private` functions:
-//
 
-// Fuctions: Temporarily display string on screen.
+// Functions: Temporarily display string on screen.
 
-///
-/// Display string at end of a specified line without writing it into the bufer.
-/// This reserves
-///
+/// Display string at end of a specified line without writing it into the buffer
 /// @param str  string that is to be displayed
 /// @param g    glyph
 /// @param yPos
-static void displayString(DynamicArray const *str, Glyph *g, int yPos) {
+static void
+displayString(DynamicArray const *str, Glyph const *g, int yPos, bool prePos) {
 	ENSURE((str != NULL) && (g != NULL) && (term.row > 0), return);
 	ENSURE(yPos >= 0, yPos = 0);
 	ENSURE(yPos < term.row, yPos = term.row - 1);
@@ -187,57 +141,71 @@ static void displayString(DynamicArray const *str, Glyph *g, int yPos) {
 	int const maxFractionOverridden = 3;
 	// Threshold: if there is nothing or no space to print, do not print,
 	//            but transfer repsonsibility for printing back to [st].
-	if (term.col < maxFractionOverridden || str->index <= 0) {       // (0)
+	if (term.col < maxFractionOverridden || str->index <= 0) {     // (0)
 		term.dirty[yPos] = 1;
 		return;
 	}
+	int32_t const botSz = prePos * 5; //< sz for position indication
 	// Determine the dimensions of used chunk of screen.
-	uint32_t const overrideSize = min(size(str),
-			term.col / maxFractionOverridden);               // (1)
-	uint32_t const overrideEnd = term.col - 1;
+	int32_t const overrideSize = min(size(str) + botSz,
+			term.col / maxFractionOverridden);             // (1)
+	int32_t const overrideEnd = term.col - 2;
 	// Has to follow trivially hence th assert:
 	// overrideSize <(1)= term.col/3  <(0)= term.col = overrideEnd + 1.
 	assert(overrideSize <= overrideEnd + 1);
-	uint32_t const overrideStart = 1 + overrideEnd - overrideSize;
-
-	Line SEC(line, malloc(sizeof(Glyph) * overrideSize),,)
-
-	for (uint32_t lineIdx = 0; lineIdx < overrideSize; ++lineIdx) {
-		line[lineIdx] = *g;
-		char * SEC(end, viewEnd(str, overrideSize - lineIdx - 1),,)
-		memcpy(&line[lineIdx].u, end, str->itemSize);
+	int32_t const overrideStart = 1 + overrideEnd - overrideSize;
+	// display history[history.size() - (overrideSize - botSz)::-1]
+	Glyph *SEC(line, malloc(sizeof(Glyph) * (overrideSize)),,)
+	int32_t offset = (size(str) - overrideSize - 1 + botSz) * str->itemSize;
+	for (uint32_t chr = 0; chr < overrideSize - botSz; ++chr) {
+		line[chr] = *g;
+		line[chr].u = *((Rune*) (str->content+(offset+=str->itemSize)));
+	}
+	if (prePos) {
+		int32_t const pos = min(round((term.scr+1)*100./HISTSIZE),100);
+		ENSURE(term.scr < HISTSIZE, term.scr = HISTSIZE - 1);
+		char prc [6];
+		switch (term.scr) {
+			case HISTSIZE - 1: strcpy(prc, "[TOP]"); break;
+			case 0:            strcpy(prc, "[BOT]"); break;
+			default:           sprintf(prc, "% 3d%c  ", pos, '%');
+		}
+		for (uint32_t chr = 0; chr < botSz; ++chr) {
+			line[chr + overrideSize - botSz] =*g;
+			line[chr + overrideSize - botSz].fg = fgPos;
+			line[chr + overrideSize - botSz].bg = bgPos;
+			utf8decode(&prc[chr], &line[chr + overrideSize - botSz].u, 1);
+		}
 	}
 	xdrawline(TLINE(yPos), 0, yPos, overrideStart);
-	xdrawline(line -overrideStart, overrideStart, yPos, overrideEnd+1);
+	xdrawline(line-overrideStart, overrideStart, yPos, overrideEnd + 1);
 	free(line);
 }
 
 static inline void printCommandString(void) {
 	Glyph g = styleCommand;
+	switch(stateVB.command.op) {
+		case yank: g.fg = fgCommandYank; g.bg = bgCommandYank; break;
+		case visual: g.fg=fgCommandVisual; g.bg=bgCommandVisual; break;
+		case visualLine: g.fg=fgCommandVisualLine;
+				 g.bg=bgCommandVisualLine;
+	}
 	displayString(isEmpty(currentCommand) ? lastCommand : currentCommand,
-			&g, term.row - 1);
+			&g, term.row - 1, true);
 }
 
 static inline void printSearchString(void) {
-	Glyph g = styleSearch;
-	displayString(&searchString, &g, term.row - 2);
+	displayString(&searchString, &styleSearch, term.row - 2, false);
 }
-
 
 // NormalMode Operation / Motion utilies.
 
+static inline bool isMotionFinished(void) { return stateVB.motion.finished; }
 
-static inline bool isMotionFinished(void) {
-	return stateVB.motion.finished;
-}
-
-static inline void finishMotion(void) {
-	stateVB.motion.finished = true;
-}
+static inline void finishMotion(void) { stateVB.motion.finished = true; }
 
 static inline bool isOperationFinished(void) {
-	return stateVB.command.op == noop
-		&& stateVB.command.infix == infix_none;
+	return stateVB.command.op==noop && stateVB.command.infix==infix_none;
 }
 
 /// Register that the current comamnd is finished and a new command is lgoged
@@ -313,49 +281,40 @@ static bool gotoString(int8_t sign) {
 static void
 highlightStringOnScreen(void) {
 	if (isEmpty(&searchString)) { return; }
+	empty(&highlights);
 	uint32_t const searchStringSize = size(&searchString);
 	uint32_t findIdx = 0;
 	uint32_t xStart, yStart;
 	bool success = true;
 	for (int y = 0; y < term.row && success; y++) {
 		for (int x = 0; x < term.col && success; x++) {
-			char const* const SEC(next,view(&searchString,findIdx),,)
 
-			if (TLINE(y)[x].u == *((uint32_t*)(next))) {
+			char const* const SEC(next,
+					view(&searchString,findIdx),,)
+			if (TLINE(y)[x].u == (Rune) *((uint32_t*)(next))) {
 				if (++findIdx == 1) {
 					xStart = x;
 					yStart = y;
 				}
 				if (findIdx == searchStringSize) {
-					// mark selected
 					success = success
 						&& append(&highlights, &xStart)
 						&& append(&highlights, &yStart);
-
-					findIdx = 0;
-					term.dirty[yStart] = 1;
+					findIdx = 0; //term.dirty[yStart] = 1;
 				}
-			} else {
-				findIdx = 0;
-			}
+			} else { findIdx = 0; }
 		}
 	}
-	if (!success) {
-		empty(&highlights);
-	}
+	if (!success) { empty(&highlights); }
 }
 
 static bool gotoStringAndHighlight(int8_t sign) {
       	// Find hte next occurrence of the #searchString in direction #sign
 	bool const found = gotoString(sign);
 	empty(&highlights);
-	if (found) {
-		highlightStringOnScreen();
-	} else {
-		applyPosition(&stateVB.motion.searchPosition);
-	}
-	tsetdirt(0, term.row-3);              //< repaint everything except for the status bar, which
-	                                      //  is painted separately.
+	highlightStringOnScreen();
+	if (!found) {  applyPosition(&stateVB.motion.searchPosition); }
+	//tsetdirt(0, term.row-3); //< everything except for the 'status bar'
 	return found;
 }
 
@@ -380,15 +339,8 @@ static bool executeCommand(DynamicArray const *command) {
 	return succ;
 }
 
-struct {
-	char const first;
-	char const second;
-} const Brackets [] = {
-	{'(', ')'},
-	{'<', '>'},
-	{'{', '}'},
-	{'[', ']'},
-};
+struct { char const first; char const second; } const Brackets [] =
+{ {'(', ')'}, {'<', '>'}, {'{', '}'}, {'[', ']'}, };
 
 
 /// Emits Command prefix and suffix when i motion is performed (e.g. yiw).
@@ -478,16 +430,14 @@ static bool expandExpression(char const c, enum Infix expandMode,
 // Public API
 //
 
-void
-onMove(void) {
+void onMove(void) {
 	stateVB.initialPosition.x = term.c.x;
 	stateVB.initialPosition.y = term.c.y;
 	stateVB.initialPosition.yScr = term.scr;
 }
 
 
-int
-highlighted(int x, int y) {
+int highlighted(int x, int y) {
 	// Compute the legal bounds for a hit:
 	int32_t const stringSize = size(&searchString);
 	int32_t xMin = x - stringSize;
@@ -499,10 +449,12 @@ highlighted(int x, int y) {
 	if (xMin < 0) { xMin = 0; }
 
 	uint32_t highSize = size(&highlights);
+	ENSURE(highSize % 2 == 0, empty(&highlights); return false;);
+	highSize /= 2;
 	uint32_t *ptr = (uint32_t*) highlights.content;
 	for (uint32_t i = 0; i < highSize; ++i) {
-		int32_t const sx = *(ptr++);
-		int32_t const sy = *(ptr++);
+		int32_t const sx = (int32_t) *(ptr++);
+		int32_t const sy = (int32_t) *(ptr++);
 		if (BETWEEN(sy, yMin, y) && (sy != yMin || sx > xMin)
 				&& (sy != y || sx <= x)) {
 			return true;
@@ -518,6 +470,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 	bool const enter = (ksym && *ksym==XK_Return) || (len==1 &&cs[0]=='\n');
 	bool const quantifier = len == 1 && (BETWEEN(cs[0], 49, 57)
 			|| (cs[0] == 48 && stateVB.motion.amount));
+	int const previousScroll = term.scr;
 	// [ESC] or [ENTER] abort resp. finish the current level of operation.
 	// Typing 'i' if no operation is currently performed behaves like ESC.
 	if (esc || enter || (len == 1 && cs[0] == 'i' && isMotionFinished()
@@ -564,7 +517,6 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 		if (operation == yank) {
 			succ = succ && checkSetNextV(&cmd, operation);
 		}
-
 		NormalModeState const st = stateVB;
 		TCursor         const tc = term.c;
 		stateVB.command.infix    = infix_none;
@@ -577,19 +529,26 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 				stateVB = st;
 				term.c = tc;
 			}
-			swap(&cmd, currentCommand);
+			empty(currentCommand);
+			for (uint32_t i = 0; i < size(&cmd); ++i) {
+				EXPAND(kCommand, currentCommand, true)
+				utf8decode(cmd.content+i, (Rune*)(kCommand),1);
+			}
 		}
 		free(cmd.content);
-		goto finishNoAppend;
+		goto finish;
 	}
 	// Commands (V / v or y)
 	switch(cs[0]) {
 		case '.':
 		{
+			if (isEmpty(currentCommand)) { toggle = !toggle; }
 			DynamicArray cmd = UTF8_ARRAY;
 			swap(&cmd, currentCommand);
 			executeCommand(&cmd) ? success : failed;
 			swap(&cmd, currentCommand);
+			free(cmd.content);
+			toggle = !toggle;
 			goto finishNoAppend;
 		}
 		case 'i': stateVB.command.infix = infix_i; goto finish;
@@ -640,15 +599,15 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 				goto finish;
 			case XK_b:
 				term.scr = min(term.scr + max(term.row - 2, 1),
-						HISTSIZE);
+						HISTSIZE - 1);
 				term.c.y = term.bot;
 				goto finish;
 			case XK_u:
-				term.scr = min(term.scr + term.row/2, HISTSIZE);
+				term.scr = min(term.scr + term.row/2, HISTSIZE - 1);
 				goto finish;
 			case XK_d:
 				term.scr = max(term.scr - term.row / 2, 0);
-				break;
+				goto finish;
 			default: return false;
 		}
 	}
@@ -677,8 +636,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 		case 'e': FALLTHROUGH
 		case 'E': sign = 1; FALLTHROUGH
 		case 'B': FALLTHROUGH
-		case 'b':
-		{
+		case 'b': {
 			char const * const wDelim =
 				cs[0] <= 90 ? wordDelimLarge : wordDelimSmall;
 			uint32_t const wDelimLen = strlen(wDelim);
@@ -719,24 +677,22 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 			  stateVB.motion.finished = false;
 			  goto finish;
 		case 'n': sign = 1; FALLTHROUGH
-		case 'N':
+		case 'N': {
 			if (stateVB.motion.search == none) return failed;
 			if (stateVB.motion.search == backward) { sign *= -1; }
-			{
-				bool b = true; int ox = term.c.x;
-				int oy = term.c.y ; int scr = term.scr;
-				int32_t i = max(stateVB.motion.amount, 1);
-				for (;i>0 && (b=gotoString(sign)); --i);
-				if (!b) {
-					term.c.x = ox; term.c.y = oy;
-					term.scr = scr;
-				}
-				goto motionFinish;
+			bool b = true; int ox = term.c.x;
+			int oy = term.c.y ; int scr = term.scr;
+			int32_t i = max(stateVB.motion.amount, 1);
+			for (;i>0 && (b=gotoString(sign)); --i) {
+                          oy = term.c.y; scr = term.scr;
 			}
+			if (!b) { term.c.x = ox; term.c.y = oy; term.scr = scr;}
+			goto motionFinish;
+		}
 		case 't': // Toggle selection mode and set dirt.
 			  sel.type = sel.type == SEL_REGULAR
 				  ? SEL_RECTANGULAR : SEL_REGULAR;
-			  tsetdirt(sel.nb.y, sel.ne.y);
+			  //tsetdirt(sel.nb.y, sel.ne.y);
 			  goto motionFinish;
 	}
 
@@ -751,6 +707,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 
 	return failed;
 motionFinish:
+	stateVB.motion.amount = 0;
 	//if (isMotionFinished() && stateVB.command.op == yank) {
 	if (stateVB.command.op == yank) {
 		selextend(term.c.x, term.c.y, term.scr, sel.type, 0);
@@ -770,12 +727,11 @@ finishNoAppend:
 		selextend(term.col-1, term.c.y, term.scr, sel.type, 0);
 	}
 
-	if (!isEmpty(&highlights)) { // XXX only has to be done if shift
+	if (previousScroll != term.scr && !isEmpty(&searchString)) {
 		empty(&highlights);
 		highlightStringOnScreen();
 	}
-
-	tsetdirt(0, term.row-3); // XXX: can be greately improved
+	tsetdirt(0, term.row-3); // Required because of the cursor cross.
 
 	printCommandString();
 	printSearchString();

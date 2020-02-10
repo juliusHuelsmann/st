@@ -1444,7 +1444,7 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
 		xclear(winx, winy + win.ch, winx + width, win.h);
 
 	/* Clean up the region we want to draw to. */
-	XftDrawRect(xw.draw, bg, winx, winy, width, win.ch);
+ 	XftDrawRect(xw.draw, bg, winx, winy, width, win.ch);
 
 	/* Set the clip region because Xft is sometimes dirty. */
 	r.x = 0;
@@ -1614,7 +1614,7 @@ xdrawline(Line line, int x1, int y1, int x2)
 
 	numspecs = xmakeglyphfontspecs(specs, &line[x1], x2 - x1, x1, y1);
 	i = ox = 0;
-	for (x = x1; x < x2 && i < numspecs; x++) {
+	for (x = x1; x < x2 && i < numspecs; ++x) {
 		new = line[x];
 		if (new.mode == ATTR_WDUMMY)
 			continue;
@@ -1818,7 +1818,7 @@ kpress(XEvent *ev)
 
 	len = XmbLookupString(xw.xic, e, buf, sizeof buf, &ksym, &status);
 	if (IS_SET(MODE_NORMAL)) {
-		ExitState const es = kpressNormalMode(buf, strlen(buf),
+		ExitState const es = kpressNormalMode(buf, len, // strlen(buf),
 				match(ControlMask, e->state),
 				&ksym);
 		if (es == finished) { normalMode(NULL); }
