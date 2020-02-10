@@ -139,9 +139,9 @@ displayString(DynamicArray const *str, Glyph const *g, int yPos, bool prePos) {
 	ENSURE(yPos < term.row, yPos = term.row - 1);
 	// Arbritary limit to avoid withhelding too much info from user.
 	int const maxFractionOverridden = 3;
-	// Threshold: if there is nothing or no space to print, do not print,
-	//            but transfer repsonsibility for printing back to [st].
-	if (term.col < maxFractionOverridden || str->index <= 0) {     // (0)
+	// Threshold: if there is no space to print, do not print, but transfer
+	//            repsonsibility for printing back to [st].
+	if (term.col < maxFractionOverridden) {                        // (0)
 		term.dirty[yPos] = 1;
 		return;
 	}
@@ -278,8 +278,7 @@ static bool gotoString(int8_t sign) {
 }
 
 /// Highlight all found strings on the current screen.
-static void
-highlightStringOnScreen(void) {
+static void highlightStringOnScreen(void) {
 	if (isEmpty(&searchString)) { return; }
 	empty(&highlights);
 	uint32_t const searchStringSize = size(&searchString);
@@ -288,7 +287,6 @@ highlightStringOnScreen(void) {
 	bool success = true;
 	for (int y = 0; y < term.row && success; y++) {
 		for (int x = 0; x < term.col && success; x++) {
-
 			char const* const SEC(next,
 					view(&searchString,findIdx),,)
 			if (TLINE(y)[x].u == (Rune) *((uint32_t*)(next))) {
@@ -311,9 +309,8 @@ highlightStringOnScreen(void) {
 static bool gotoStringAndHighlight(int8_t sign) {
       	// Find hte next occurrence of the #searchString in direction #sign
 	bool const found = gotoString(sign);
-	empty(&highlights);
-	highlightStringOnScreen();
 	if (!found) {  applyPosition(&stateVB.motion.searchPosition); }
+	highlightStringOnScreen();
 	//tsetdirt(0, term.row-3); //< everything except for the 'status bar'
 	return found;
 }
@@ -436,7 +433,6 @@ void onMove(void) {
 	stateVB.initialPosition.yScr = term.scr;
 }
 
-
 int highlighted(int x, int y) {
 	// Compute the legal bounds for a hit:
 	int32_t const stringSize = size(&searchString);
@@ -481,6 +477,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 			tfulldirt();
 			return finished;
 		}
+		len = 0;
 		goto motionFinish;
 	}
 	// Search: append to search string, then search & highlight
@@ -492,6 +489,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 				exitCommand();
 				return success;
 			}
+			len = 0;
 		} else if (len >= 1) {
 			EXPAND(kSearch, &searchString, true)
 			utf8decode(cs, (Rune*)(kSearch), len);
@@ -613,6 +611,8 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 	}
 	// Motions
 	switch(cs[0]) {
+		case 'c': empty(&commandHist0); empty(&commandHist1);
+			  goto finishNoAppend;
 		case 'j': sign = 1; FALLTHROUGH
 		case 'k': moveLine(max(stateVB.motion.amount,1) * sign);
 			  goto motionFinish;
@@ -695,7 +695,6 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 			  //tsetdirt(sel.nb.y, sel.ne.y);
 			  goto motionFinish;
 	}
-
 	// Custom commands
 	for (size_t i = 0; i < amountNormalModeShortcuts; ++i) {
 		if (cs[0] == normalModeShortcuts[i].key) {
@@ -704,7 +703,6 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 					? success : failed;
 		}
 	}
-
 	return failed;
 motionFinish:
 	stateVB.motion.amount = 0;
@@ -728,13 +726,10 @@ finishNoAppend:
 	}
 
 	if (previousScroll != term.scr && !isEmpty(&searchString)) {
-		empty(&highlights);
 		highlightStringOnScreen();
 	}
-	tsetdirt(0, term.row-3); // Required because of the cursor cross.
-
+	tsetdirt(0, term.row-3); //< Required because of the cursor cross.
 	printCommandString();
 	printSearchString();
 	return success;
 }
-

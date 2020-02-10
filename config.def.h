@@ -155,11 +155,13 @@ static unsigned int mousebg = 0;
  * doesn't match the ones requested.
  */
 static unsigned int defaultattr = 11;
-/// Colors for the entities that are highlighted in normal mode.
+/// Colors for the entities that are 'highlighted' in normal mode (search
+/// results currently on screen) [Vim Browse].
 static unsigned int highlightBg = 160;
 static unsigned int highlightFg = 15;
-/// Colors for the line and column that is marked 'current' in normal mode.
-static unsigned int currentBg = 0;
+/// Colors for highlighting the current cursor position (row + col) in normal
+/// mode [Vim Browse].
+static unsigned int currentBg = 8;
 static unsigned int currentFg = 15;
 
 /// Xresources preferences to load at startup
@@ -525,13 +527,15 @@ static char ascii_printable[] =
 
 
 /// word sepearors normal mode
+/// [Vim Browse].
 char wordDelimSmall[] = " \t!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 char wordDelimLarge[] = " \t"; /// <Word sepearors normal mode (capital W)
 
 /// Shortcusts executed in normal mode (which should not already be in use)
+/// [Vim Browse].
 struct NormalModeShortcuts normalModeShortcuts [] = {
-	{ 'C', "?Building\n" },
-	{ 'c', "/Building\n" },
+	{ 'R', "?Building\n" },
+	{ 'r', "/Building\n" },
 	{ 'F', "?: error:\n" },
 	{ 'f', "/: error:\n" },
 	{ 'Q', "?[Leaving vim, starting execution]\n" },
@@ -542,12 +546,15 @@ struct NormalModeShortcuts normalModeShortcuts [] = {
 
 size_t const amountNormalModeShortcuts = sizeof(normalModeShortcuts) / sizeof(*normalModeShortcuts);
 
-/// Style of the command string visualized in normal mode in the right corner.
+/// Style of the command string visualized in normal mode in the right corner
+/// [Vim Browse].
 Glyph const styleCommand = {' ', ATTR_ITALIC | ATTR_FAINT, 7, 16};
-
 /// Style of the search string visualized in normal mode in the right corner.
+/// [Vim Browse].
 Glyph const styleSearch = {' ', ATTR_ITALIC | ATTR_BOLD_FAINT, 7, 16};
 
+/// Colors used in normal mode in order to highlight different operations and
+/// empathise the current position on screen  in  the status area [Vim Browse].
 unsigned int bgCommandYank = 11;
 unsigned int bgCommandVisual = 4;
 unsigned int bgCommandVisualLine = 12;
