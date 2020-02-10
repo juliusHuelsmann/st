@@ -478,8 +478,8 @@ char wordDelimLarge[] = " \t"; /// <Word sepearors normal mode (capital W)
 /// Shortcusts executed in normal mode (which should not already be in use)
 /// [Vim Browse].
 struct NormalModeShortcuts normalModeShortcuts [] = {
-	{ 'C', "?Building\n" },
-	{ 'c', "/Building\n" },
+	{ 'R', "?Building\n" },
+	{ 'r', "/Building\n" },
 	{ 'F', "?: error:\n" },
 	{ 'f', "/: error:\n" },
 	{ 'Q', "?[Leaving vim, starting execution]\n" },

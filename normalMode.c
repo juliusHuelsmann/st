@@ -139,9 +139,9 @@ displayString(DynamicArray const *str, Glyph const *g, int yPos, bool prePos) {
 	ENSURE(yPos < term.row, yPos = term.row - 1);
 	// Arbritary limit to avoid withhelding too much info from user.
 	int const maxFractionOverridden = 3;
-	// Threshold: if there is nothing or no space to print, do not print,
-	//            but transfer repsonsibility for printing back to [st].
-	if (term.col < maxFractionOverridden || str->index <= 0) {     // (0)
+	// Threshold: if there is no space to print, do not print, but transfer
+	//            repsonsibility for printing back to [st].
+	if (term.col < maxFractionOverridden) {                        // (0)
 		term.dirty[yPos] = 1;
 		return;
 	}
@@ -614,6 +614,8 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 	}
 	// Motions
 	switch(cs[0]) {
+		case 'c': empty(&commandHist0); empty(&commandHist1);
+			  goto finishNoAppend;
 		case 'j': sign = 1; FALLTHROUGH
 		case 'k': moveLine(max(stateVB.motion.amount,1) * sign);
 			  goto motionFinish;
@@ -696,7 +698,6 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 			  //tsetdirt(sel.nb.y, sel.ne.y);
 			  goto motionFinish;
 	}
-
 	// Custom commands
 	for (size_t i = 0; i < amountNormalModeShortcuts; ++i) {
 		if (cs[0] == normalModeShortcuts[i].key) {
@@ -705,7 +706,6 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 					? success : failed;
 		}
 	}
-
 	return failed;
 motionFinish:
 	stateVB.motion.amount = 0;
@@ -731,8 +731,7 @@ finishNoAppend:
 	if (previousScroll != term.scr && !isEmpty(&searchString)) {
 		highlightStringOnScreen();
 	}
-	tsetdirt(0, term.row-3); // Required because of the cursor cross.
-
+	tsetdirt(0, term.row-3); //< Required because of the cursor cross.
 	printCommandString();
 	printSearchString();
 	return success;
