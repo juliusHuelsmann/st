@@ -23,18 +23,13 @@
 
 //
 // Interface to the terminal
-extern Glyph const styleCommand;
-extern Glyph const styleSearch;
+extern Glyph const styleCommand, styleSearch;
 extern NormalModeShortcuts normalModeShortcuts[];
 extern size_t const amountNormalModeShortcuts;
 extern char wordDelimSmall[];
 extern char wordDelimLarge[];
-extern unsigned int fgCommandYank;
-extern unsigned int fgCommandVisual;
-extern unsigned int fgCommandVisualLine;
-extern unsigned int bgCommandYank;
-extern unsigned int bgCommandVisual;
-extern unsigned int bgCommandVisualLine;
+extern unsigned int fgCommandYank, fgCommandVisual, fgCommandVisualLine,
+       bgCommandYank, bgCommandVisual, bgCommandVisualLine, bgPos, fgPos;
 
 extern void selclear(void);
 extern void tsetdirt(int, int);
@@ -146,23 +141,23 @@ displayString(DynamicArray const *str, Glyph const *g, int yPos, bool prePos) {
 	int const maxFractionOverridden = 3;
 	// Threshold: if there is nothing or no space to print, do not print,
 	//            but transfer repsonsibility for printing back to [st].
-	if (term.col < maxFractionOverridden || str->index <= 0) {       // (0)
+	if (term.col < maxFractionOverridden || str->index <= 0) {     // (0)
 		term.dirty[yPos] = 1;
 		return;
 	}
 	int32_t const botSz = prePos * 5; //< sz for position indication
 	// Determine the dimensions of used chunk of screen.
 	int32_t const overrideSize = min(size(str) + botSz,
-			term.col / maxFractionOverridden);            // (1)
+			term.col / maxFractionOverridden);             // (1)
 	int32_t const overrideEnd = term.col - 2;
 	// Has to follow trivially hence th assert:
 	// overrideSize <(1)= term.col/3  <(0)= term.col = overrideEnd + 1.
 	assert(overrideSize <= overrideEnd + 1);
 	int32_t const overrideStart = 1 + overrideEnd - overrideSize;
-
+	// display history[history.size() - (overrideSize - botSz)::-1]
 	Glyph *SEC(line, malloc(sizeof(Glyph) * (overrideSize)),,)
 	int32_t offset = (size(str) - overrideSize - 1 + botSz) * str->itemSize;
-	for (uint32_t chr = botSz; chr < overrideSize; ++chr) {
+	for (uint32_t chr = 0; chr < overrideSize - botSz; ++chr) {
 		line[chr] = *g;
 		line[chr].u = *((Rune*) (str->content+(offset+=str->itemSize)));
 	}
@@ -176,8 +171,10 @@ displayString(DynamicArray const *str, Glyph const *g, int yPos, bool prePos) {
 			default:           sprintf(prc, "% 3d%c  ", pos, '%');
 		}
 		for (uint32_t chr = 0; chr < botSz; ++chr) {
-			line[chr] = *g;
-			utf8decode(&prc[chr], &line[chr].u, 1);
+			line[chr + overrideSize - botSz] =*g;
+			line[chr + overrideSize - botSz].fg = fgPos;
+			line[chr + overrideSize - botSz].bg = bgPos;
+			utf8decode(&prc[chr], &line[chr + overrideSize - botSz].u, 1);
 		}
 	}
 	xdrawline(TLINE(yPos), 0, yPos, overrideStart);
