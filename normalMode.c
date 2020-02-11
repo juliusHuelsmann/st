@@ -145,7 +145,7 @@ displayString(DynamicArray const *str, Glyph const *g, int yPos, bool prePos) {
 		term.dirty[yPos] = 1;
 		return;
 	}
-	int32_t const botSz = prePos * 5; //< sz for position indication
+	int32_t const botSz = prePos * 6; //< sz for position indication
 	// Determine the dimensions of used chunk of screen.
 	int32_t const overrideSize = min(size(str) + botSz,
 			term.col / maxFractionOverridden);             // (1)
@@ -162,23 +162,26 @@ displayString(DynamicArray const *str, Glyph const *g, int yPos, bool prePos) {
 		line[chr].u = *((Rune*) (str->content+(offset+=str->itemSize)));
 	}
 	if (prePos) {
-		int32_t const pos = min(round((term.scr+1)*100./HISTSIZE),100);
 		ENSURE(term.scr < HISTSIZE, term.scr = HISTSIZE - 1);
-		char prc [6];
+		int32_t const p=round((HISTSIZE-1-term.scr)*100./(HISTSIZE-1));
+		char prc [8];
 		switch (term.scr) {
-			case HISTSIZE - 1: strcpy(prc, "[TOP]"); break;
-			case 0:            strcpy(prc, "[BOT]"); break;
-			default:           sprintf(prc, "% 3d%c  ", pos, '%');
+			case HISTSIZE - 1: strcpy(prc, " [TOP]"); break;
+			case 0:            strcpy(prc, " [BOT]"); break;
+			default:           sprintf(prc, " % 3d%c  ", p, '%');
 		}
 		for (uint32_t chr = 0; chr < botSz; ++chr) {
 			line[chr + overrideSize - botSz] =*g;
 			line[chr + overrideSize - botSz].fg = fgPos;
 			line[chr + overrideSize - botSz].bg = bgPos;
-			utf8decode(&prc[chr], &line[chr + overrideSize - botSz].u, 1);
+			utf8decode(&prc[chr],&line[chr+overrideSize-botSz].u,1);
 		}
+		line[overrideSize - botSz] =*g;
 	}
 	xdrawline(TLINE(yPos), 0, yPos, overrideStart);
+	term.c.y -= term.row; term.c.x -= term.col; // not highlight hack
 	xdrawline(line-overrideStart, overrideStart, yPos, overrideEnd + 1);
+	term.c.y += term.row; term.c.x += term.col;
 	free(line);
 }
 
@@ -534,7 +537,7 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 			}
 		}
 		free(cmd.content);
-		goto finish;
+		goto finishNoAppend;
 	}
 	// Commands (V / v or y)
 	switch(cs[0]) {
