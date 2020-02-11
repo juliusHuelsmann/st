@@ -549,7 +549,6 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 			executeCommand(&cmd) ? success : failed;
 			swap(&cmd, currentCommand);
 			free(cmd.content);
-			toggle = !toggle;
 			goto finishNoAppend;
 		}
 		case 'i': stateVB.command.infix = infix_i; goto finish;
