@@ -462,9 +462,8 @@ int highlighted(int x, int y) {
 	return false;
 }
 
-ExitState
-kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
-	KeySym const * const ksym = (KeySym*) vsym;
+ExitState kpressNormalMode(char const * cs, int len, bool ctrl, void const *v) {
+	KeySym const * const ksym = (KeySym*) v;
 	bool const esc = ksym &&  *ksym == XK_Escape;
 	bool const enter = (ksym && *ksym==XK_Return) || (len==1 &&cs[0]=='\n');
 	bool const quantifier = len == 1 && (BETWEEN(cs[0], 49, 57)
@@ -483,20 +482,32 @@ kpressNormalMode(char const * cs, int len, bool ctrl, void const * vsym) {
 		len = 0;
 		goto motionFinish;
 	}
-	// Search: append to search string, then search & highlight
-	if (stateVB.motion.search != none && !stateVB.motion.finished) {
-		if (ksym && *ksym == XK_BackSpace) {
-			if (!isEmpty(currentCommand)) { pop(currentCommand); }
+	// Backspace
+	if (ksym && *ksym == XK_BackSpace) {
+		bool s = stateVB.motion.search!=none&&!stateVB.motion.finished;
+		bool q = stateVB.motion.amount != 0;
+		if (!(s || q)) { return failed; }
+		len = 0;
+
+		if (!isEmpty(currentCommand)) { pop(currentCommand); }
+		if (s) {
 			if (!isEmpty(&searchString)) { pop(&searchString); }
-			if (isEmpty(&searchString)) {
+			else if (isEmpty(&searchString)) {
 				exitCommand();
 				return success;
 			}
-			len = 0;
-		} else if (len >= 1) {
+		} else if (q) {
+			stateVB.motion.amount /= 10;
+			goto finishNoAppend;
+		}
+	}
+
+	// Search: append to search string, then search & highlight
+	if (stateVB.motion.search != none && !stateVB.motion.finished) {
+		if (len >= 1) {
 			EXPAND(kSearch, &searchString, true)
 			utf8decode(cs, (Rune*)(kSearch), len);
-		} else { return success; }
+		}
 		applyPosition(&stateVB.motion.searchPosition);
 		gotoStringAndHighlight(getSearchDirection());
 		goto finish;
