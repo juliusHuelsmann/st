@@ -473,9 +473,11 @@ ExitState kpressNormalMode(char const * cs, int len, bool ctrl, void const *v) {
 	// Typing 'i' if no operation is currently performed behaves like ESC.
 	if (esc || enter || (len == 1 && cs[0] == 'i' && isMotionFinished()
 				&& isOperationFinished())) {
-		if (terminateCommand(!enter) ) {
+		if (terminateCommand(!enter)) {
 			applyPosition(&stateVB.initialPosition);
+			Position const pc = stateVB.initialPosition;
 			stateVB = defaultNormalMode;
+			stateVB.initialPosition = pc;
 			tfulldirt();
 			return finished;
 		}
@@ -614,7 +616,7 @@ ExitState kpressNormalMode(char const * cs, int len, bool ctrl, void const *v) {
 				term.c.y = term.bot;
 				goto finish;
 			case XK_u:
-				term.scr = min(term.scr + term.row/2, HISTSIZE - 1);
+				term.scr = min(term.scr+term.row/2, HISTSIZE-1);
 				goto finish;
 			case XK_d:
 				term.scr = max(term.scr - term.row / 2, 0);
