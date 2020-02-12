@@ -1,5 +1,8 @@
 /* See LICENSE for license details. */
 
+#include "glyph.h"
+#include "normalMode.h"
+
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -33,6 +36,8 @@ enum glyph_attribute {
 	ATTR_WRAP       = 1 << 8,
 	ATTR_WIDE       = 1 << 9,
 	ATTR_WDUMMY     = 1 << 10,
+	ATTR_HIGHLIGHT  = 1 << 12,
+	ATTR_CURRENT    = 1 << 13,
 	ATTR_BOLD_FAINT = ATTR_BOLD | ATTR_FAINT,
 };
 
@@ -40,11 +45,6 @@ enum selection_mode {
 	SEL_IDLE = 0,
 	SEL_EMPTY = 1,
 	SEL_READY = 2
-};
-
-enum selection_type {
-	SEL_REGULAR = 1,
-	SEL_RECTANGULAR = 2
 };
 
 enum selection_snap {
@@ -56,18 +56,6 @@ typedef unsigned char uchar;
 typedef unsigned int uint;
 typedef unsigned long ulong;
 typedef unsigned short ushort;
-
-typedef uint_least32_t Rune;
-
-#define Glyph Glyph_
-typedef struct {
-	Rune u;           /* character code */
-	ushort mode;      /* attribute flags */
-	uint32_t fg;      /* foreground  */
-	uint32_t bg;      /* background  */
-} Glyph;
-
-typedef Glyph *Line;
 
 typedef union {
 	int i;
@@ -81,6 +69,11 @@ void die(const char *, ...);
 void redraw(void);
 void draw(void);
 
+int currentLine(int, int);
+void kscrolldown(const Arg *);
+void kscrollup(const Arg *);
+void normalMode(Arg const *);
+
 void printscreen(const Arg *);
 void printsel(const Arg *);
 void sendbreak(const Arg *);
@@ -90,6 +83,9 @@ int tattrset(int);
 void tnew(int, int);
 void tresize(int, int);
 void tsetdirtattr(int);
+size_t utf8decode(const char *, Rune *, size_t);
+Rune utf8decodebyte(char, size_t *);
+void tsetdirt(int, int);
 void ttyhangup(void);
 int ttynew(char *, char *, char *, char **);
 size_t ttyread(void);
@@ -100,8 +96,10 @@ void resettitle(void);
 
 void selclear(void);
 void selinit(void);
-void selstart(int, int, int);
-void selextend(int, int, int, int);
+void selstart(int, int, int, int);
+void xselstart(int, int, int);
+void selextend(int, int, int, int, int);
+void xselextend(int, int, int, int);
 int selected(int, int);
 char *getsel(void);
 
