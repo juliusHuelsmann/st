@@ -15,7 +15,8 @@
 
 #define LEN(a)                 (sizeof(a) / sizeof(a)[0])
 #define BETWEEN(x, a, b)       ((a) <= (x) && (x) <= (b))
-#define FALLTHROUGH            __attribute__((fallthrough));
+//#define FALLTHROUGH            __attribute__((fallthrough));
+#define FALLTHROUGH
 #define SEC(var,ini,h,r)       var = ini; if (!var) { h; return r; }
 #define EXPAND(v1,v2,r)        char *SEC(v1, expand(v2), empty(v2), true)
 #define currentCommand         (toggle ? &commandHist0 : &commandHist1)
