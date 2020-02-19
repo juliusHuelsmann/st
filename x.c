@@ -772,25 +772,23 @@ xloadalpha(void)
 void
 xloadcols(void)
 {
-	int i;
 	static int loaded;
 	Color *cp;
 
-	if (loaded) {
-		for (cp = dc.col; cp < &dc.col[dc.collen]; ++cp)
-			XftColorFree(xw.dpy, xw.vis, xw.cmap, cp);
-	} else {
-		dc.collen = MAX(LEN(colorname), 256);
-		dc.col = xmalloc(dc.collen * sizeof(Color));
+	if (!loaded) {
+		dc.collen = 1 + (defaultbg = MAX(LEN(colorname), 256));
+		dc.col = xmalloc((dc.collen) * sizeof(Color));
 	}
 
-	for (i = 0; i < dc.collen; i++)
+	for (int i = 0; i+1 < dc.collen; ++i)
 		if (!xloadcolor(i, NULL, &dc.col[i])) {
 			if (colorname[i])
 				die("could not allocate color '%s'\n", colorname[i]);
 			else
 				die("could not allocate color %d\n", i);
 		}
+	if (dc.collen) // cannot die, as the color is already loaded.
+		xloadcolor(focused ? focusedbg : unfocusedbg, NULL, &dc.col[defaultbg]);
 
 	xloadalpha();
 	loaded = 1;
@@ -1520,11 +1518,11 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 		}
 		drawcol = dc.col[g.bg];
 	}
-  
+
 	if ((g.mode & ATTR_CURRENT) && (win.mode & MODE_NORMAL)) {
 		g.bg = currentBg;
 		g.fg = currentFg;
-	} 
+	}
 
 	if ((g.mode & ATTR_CURRENT) && (win.mode & MODE_NORMAL)) {
 		g.bg = currentBg;
@@ -1734,29 +1732,30 @@ focus(XEvent *ev)
 
 	if (e->mode == NotifyGrab)
 		return;
-
-    if (ev->type == FocusIn) {
-        XSetICFocus(xw.xic);
-        win.mode |= MODE_FOCUSED;
-        xseturgency(0);
-        if (IS_SET(MODE_FOCUS))
-            ttywrite("\033[I", 3, 0);
-        if (!focused) {
-            focused = true;
-            xloadalpha();
-            redraw();
-        }
-    } else {
-        XUnsetICFocus(xw.xic);
-        win.mode &= ~MODE_FOCUSED;
-        if (IS_SET(MODE_FOCUS))
-            ttywrite("\033[O", 3, 0);
-        if (focused) {
-            focused = false;
-            xloadalpha();
-            redraw();
-        }
-    }
+	if (ev->type == FocusIn) {
+		XSetICFocus(xw.xic);
+		win.mode |= MODE_FOCUSED;
+		xseturgency(0);
+		if (IS_SET(MODE_FOCUS))
+			ttywrite("\033[I", 3, 0);
+		if (!focused) {
+			focused = true;
+			xloadcols();
+			xloadalpha();
+			redraw();
+		}
+	} else {
+		XUnsetICFocus(xw.xic);
+		win.mode &= ~MODE_FOCUSED;
+		if (IS_SET(MODE_FOCUS))
+			ttywrite("\033[O", 3, 0);
+		if (focused) {
+			focused = false;
+			xloadcols();
+			xloadalpha();
+			redraw();
+		}
+	}
 }
 
 int
