@@ -751,25 +751,23 @@ xloadalpha(void)
 void
 xloadcols(void)
 {
-	int i;
 	static int loaded;
 	Color *cp;
 
-	if (loaded) {
-		for (cp = dc.col; cp < &dc.col[dc.collen]; ++cp)
-			XftColorFree(xw.dpy, xw.vis, xw.cmap, cp);
-	} else {
-		dc.collen = MAX(LEN(colorname), 256);
-		dc.col = xmalloc(dc.collen * sizeof(Color));
+	if (!loaded) {
+		dc.collen = 1 + (defaultbg = MAX(LEN(colorname), 256));
+		dc.col = xmalloc((dc.collen) * sizeof(Color));
 	}
 
-	for (i = 0; i < dc.collen; i++)
+	for (int i = 0; i+1 < dc.collen; ++i)
 		if (!xloadcolor(i, NULL, &dc.col[i])) {
 			if (colorname[i])
 				die("could not allocate color '%s'\n", colorname[i]);
 			else
 				die("could not allocate color %d\n", i);
 		}
+	if (dc.collen) // cannot die, as the color is already loaded.
+		xloadcolor(focused ? focusedbg : unfocusedbg, NULL, &dc.col[defaultbg]);
 
 	xloadalpha();
 	loaded = 1;
@@ -1695,6 +1693,7 @@ focus(XEvent *ev)
 			ttywrite("\033[I", 3, 0);
 		if (!focused) {
 			focused = true;
+			xloadcols();
 			xloadalpha();
 			redraw();
 		}
@@ -1705,6 +1704,7 @@ focus(XEvent *ev)
 			ttywrite("\033[O", 3, 0);
 		if (focused) {
 			focused = false;
+			xloadcols();
 			xloadalpha();
 			redraw();
 		}

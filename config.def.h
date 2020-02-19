@@ -122,9 +122,11 @@ static const char *colorname[] = {
  * foreground, background, cursor, reverse cursor
  */
 unsigned int defaultfg = 7;
-unsigned int defaultbg = 258;
+unsigned int defaultbg = 0; //< n'importe quoi
 static unsigned int defaultcs = 256;
 static unsigned int defaultrcs = 257;
+unsigned int focusedbg = 17;
+unsigned int unfocusedbg = 16;
 
 /*
  * Default shape of cursor
