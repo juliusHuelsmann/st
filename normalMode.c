@@ -164,12 +164,13 @@ displayString(DynamicArray const *str, Glyph const *g, int yPos, bool prePos) {
 	}
 	if (prePos) {
 		ENSURE(term.scr < HISTSIZE, term.scr = HISTSIZE - 1);
-		int32_t const p=round((HISTSIZE-1-term.scr)*100./(HISTSIZE-1));
-		char prc [8];
+		int const p=(int)(0.5+(HISTSIZE-1-term.scr)*100./(HISTSIZE-1));
+		int const v = min(max(p, 0), 100);
+		char prc [10];
 		switch (term.scr) {
 			case HISTSIZE - 1: strcpy(prc, " [TOP]"); break;
 			case 0:            strcpy(prc, " [BOT]"); break;
-			default:           sprintf(prc, " % 3d%c  ", p, '%');
+			default:           sprintf(prc, " % 3d%c  ", v, '%');
 		}
 		for (uint32_t chr = 0; chr < botSz; ++chr) {
 			line[chr + overrideSize - botSz] =*g;
