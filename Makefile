@@ -16,6 +16,7 @@ options:
 	@echo "CC      = $(CC)"
 
 config.h:
+	xrdb -merge .Xresources
 	cp config.def.h config.h
 
 .c.o:
