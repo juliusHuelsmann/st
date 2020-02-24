@@ -1,8 +1,7 @@
+### Patches
 
-The `Alpha Focus Highlight` and the `Vim Browse` patches of the `suckless` `simple terminal` are developped in this repository.
-
-`Vim Browse` adds history-functionality to the terminal, and allows to -- among other things -- select, yank, search it via keyboard using vim-like motions and operations. Branch: `plainVimPatchV1`.
-
+The `Alpha Focus Highlight` and the `Vim Browse` patches of the `suckless` `simple terminal` are developped in this repository.  
+`Vim Browse` adds history-functionality to the terminal, and allows to -- among other things -- select, yank, search it via keyboard using vim-like motions and operations. Branch: `plainVimPatchV1`.  
 The `Alpha Focus Highlight` patch applies transparency to the configured background, and allows to use different transparency levels and background colors for focused and unfocused windows. This patch requires a running X composite manager. Branch: `plainAlphaPatchV1`.
 
 Both the `Vim Browse` and the `Alpha Focus Highlight` patches are applied to the `master` branch, together with a set of other patches (currently `xresources`, `externalPipe`) and adapted configuration files.
@@ -18,23 +17,23 @@ to your `picom` configuration file and keep a vanilla `st` build.
 
 If you want to configure `inactive-opacity` and `active-opacity` rules in order to apply opacity to other applications, but keep the benefits of the st alpha aptches, have a look at [this picom configuration file](https://github.com/juliusHuelsmann/Config/blob/master/.config/picom/picom.conf), in which opacity management configured to be performed by `st`.
 
-# Build and install process
+## Build and install process
 
-## Build Dependencies
+### Build Dependencies
 Build requirements: `make` `git` (optional).
 Dependencies for alpha patch: e.g. `picom`.
 ```bash
 sudo pacman -S make git picom
 ```
 
-### 1. Clone
+#### 1. Clone
 
 ```bash
 git clone https://github.com/juliusHuelsmann/st.git
 cd st
 ```
 
-### 2. Build
+#### 2. Build
 
 ```bash
 rm config.h
@@ -42,7 +41,7 @@ make clean
 make
 ```
 
-### 3. Install
+#### 3. Install
 On the `master`, this copies the shipped `.Xresources` file to the home directory. If the file already exists, the user is prompted and can opt to override.
 ```bash
 sudo make install
@@ -50,14 +49,14 @@ sudo make install
 In case you want to use the `.Xresources` (color scheme and opacity), 
 be sure to copy  them into your home directory,
 ```bash
-cp -i .Xresources $(HOME)/.Xresources
+cp -i .Xresources $HOME/.Xresources
 ```
 and to merge them after booting
 ```bash
-xrdb -merge $(HOME)/.Xresources
+xrdb -merge $HOME/.Xresources
 ```
 
-## Apply Patch to clone of `st`
+### Apply Patch to clone of `st`
 Depending on the version of `st` you are using as a basis, download a patch version from the [Release](https://github.com/juliusHuelsmann/st/releases) page, apply it via
 
 ```bash
@@ -69,9 +68,9 @@ and build as described above.
 From time to time, the patches will break against the `HEAD` of the `st` `master` branch. If you encounter patch conflicts when patching against the vanilla version of `st`, please report an issue. If you succeed to solve it yourself (or would like to propose some changes to the source code), your contribution is very welcome.
 
 
-# Custom Patches:
+## Custom Patches:
 
-## 1. Vim Browse Patch
+### 1. Vim Browse Patch
 
 Description
 -----------
@@ -131,7 +130,7 @@ Authors of the Vim-Browse Patch
 * [Kevin Velghe](https://github.com/paretje): Underline highlight fix
 
 
-## 2. Alpha Selection Patch
+### 2. Alpha Selection Patch
 
 Description
 -----------
