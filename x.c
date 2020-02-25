@@ -1694,7 +1694,6 @@ focus(XEvent *ev)
 		if (!focused) {
 			focused = true;
 			xloadcols();
-			xloadalpha();
 			redraw();
 		}
 	} else {
@@ -1705,7 +1704,6 @@ focus(XEvent *ev)
 		if (focused) {
 			focused = false;
 			xloadcols();
-			xloadalpha();
 			redraw();
 		}
 	}
@@ -2017,6 +2015,7 @@ run:
 	XSetLocaleModifiers("");
 	cols = MAX(cols, 1);
 	rows = MAX(rows, 1);
+	defaultbg = MAX(LEN(colorname), 256);
 	tnew(cols, rows);
 	xinit(cols, rows);
 	xsetenv();
