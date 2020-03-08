@@ -21,6 +21,7 @@ static char *argv0;
 #include "arg.h"
 #include "st.h"
 #include "win.h"
+extern void config_init();
 
 /* types used in config.h */
 typedef struct {
@@ -1729,6 +1730,7 @@ void
 focus(XEvent *ev)
 {
 	XFocusChangeEvent *e = &ev->xfocus;
+	config_init();
 
 	if (e->mode == NotifyGrab)
 		return;
@@ -2032,18 +2034,20 @@ resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
 void
 config_init(void)
 {
+	Display* k = XOpenDisplay(NULL);
 	char *resm;
 	XrmDatabase db;
 	ResourcePref *p;
 
 	XrmInitialize();
-	resm = XResourceManagerString(xw.dpy);
+	resm = XResourceManagerString(k);
 	if (!resm)
 		return;
 
 	db = XrmGetStringDatabase(resm);
 	for (p = resources; p < resources + LEN(resources); p++)
 		resource_load(db, p->name, p->type, p->dst);
+	XCloseDisplay(k);
 }
 
 
