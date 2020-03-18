@@ -40,6 +40,7 @@ enum glyph_attribute {
 	ATTR_WDUMMY     = 1 << 10,
 	ATTR_HIGHLIGHT  = 1 << 12,
 	ATTR_CURRENT    = 1 << 13,
+	ATTR_SELECTED   = 1 << 14,
 	ATTR_BOLD_FAINT = ATTR_BOLD | ATTR_FAINT,
 };
 

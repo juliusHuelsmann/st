@@ -123,6 +123,9 @@ static const char *colorname[] = {
  */
 unsigned int defaultfg = 7;
 unsigned int defaultbg = 0; //< n'importe quoi
+// The following two colors are applied to the selection if desired and can be changed
+unsigned int selfg = 0;
+unsigned int selbg = 1;
 static unsigned int defaultcs = 256;
 static unsigned int defaultrcs = 257;
 unsigned int focusedbg = 11;

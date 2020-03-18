@@ -1351,6 +1351,9 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
 	} else if ((base.mode & ATTR_CURRENT) && (win.mode & MODE_NORMAL)) {
 		base.bg = currentBg;
 		base.fg = currentFg;
+	} else if ((base.mode & ATTR_SELECTED) && (win.mode & MODE_NORMAL)) {
+		base.bg = selbg;
+		base.fg = selfg;
 	}
 
 	if (IS_TRUECOL(base.fg)) {
@@ -1485,7 +1488,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	Color drawcol;
 
 	/* remove the old cursor */
-	if (selected(ox, oy)) og.mode ^= ATTR_REVERSE;
+	if (selected(ox, oy)) og.mode ^= ATTR_SELECTED;
 	if (highlighted(ox, oy)) { og.mode ^= ATTR_HIGHLIGHT; }
 	if (currentLine(ox, oy)) { og.mode ^= ATTR_CURRENT; }
 	xdrawglyph(og, ox, oy);
@@ -1522,11 +1525,9 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 	if ((g.mode & ATTR_CURRENT) && (win.mode & MODE_NORMAL)) {
 		g.bg = currentBg;
 		g.fg = currentFg;
-	}
-
-	if ((g.mode & ATTR_CURRENT) && (win.mode & MODE_NORMAL)) {
-		g.bg = currentBg;
-		g.fg = currentFg;
+	} else if ((g.mode & ATTR_SELECTED) && (win.mode & MODE_NORMAL)) {
+		g.bg = selbg;
+		g.fg = selfg;
 	}
 
 	/* draw the new one */
@@ -1617,7 +1618,7 @@ xdrawline(Line line, int x1, int y1, int x2)
 		if (new.mode == ATTR_WDUMMY)
 			continue;
 		if (selected(x, y1))
-			new.mode ^= ATTR_REVERSE;
+			new.mode ^= ATTR_SELECTED;
 		if (highlighted(x, y1)) {
 			new.mode ^= ATTR_HIGHLIGHT;
 		}
