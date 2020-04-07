@@ -84,7 +84,7 @@ unsigned int tabspaces = 8;
 
 /* bg opacity */
 float alpha = 0.8;           //< alpha value used when the window is focused.
-float alphaUnfocussed = 0.35; //< alpha value used when the focus is lost
+float alphaUnfocused = 0.35; //< alpha value used when the focus is lost
 
 /* Terminal colors (16 first used in escape sequence) */
 static const char *colorname[] = {
@@ -186,7 +186,7 @@ ResourcePref resources[] = {
 		{ "color14",      STRING,  &colorname[14] },
 		{ "color15",      STRING,  &colorname[15] },
 		{ "alpha",        FLOAT,  &alpha},
-		{ "alphaUnfocussed",FLOAT,  &alphaUnfocussed },
+		{ "alphaUnfocused",FLOAT,  &alphaUnfocused },
 		{ "background",   STRING,  &colorname[256] },
 		{ "foreground",   STRING,  &colorname[257] },
 		{ "cursorColor",  STRING,  &colorname[258] },
