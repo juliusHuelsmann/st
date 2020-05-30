@@ -127,7 +127,7 @@ unsigned int defaultbg = 0;
 static unsigned int defaultcs = 256;
 static unsigned int defaultrcs = 257;
 unsigned int bg = 17, bgUnfocused = 16;
-unsigned int const currentBg = 6, buffSize = 255;
+unsigned int const currentBg = 8, buffSize = 255;
 /// [Vim Browse] Colors for search results currently on screen.
 unsigned int const highlightBg = 160, highlightFg = 15;
 char const wDelS[] = "!\"#$%&'()*+,-./:;<=>?@[\\]^`{|}~", wDelL[] = " \t";
@@ -136,9 +136,9 @@ char *nmKeys [] = {              ///< Shortcusts executed in normal mode
   "Q/[Leaving vim, starting execution]\nN","F/: error:\nN", "f/: error:\n", "SQf"
 };
 unsigned int const amountNmKeys = sizeof(nmKeys) / sizeof(*nmKeys);
-/// Style of the {command, search} string shown in the right corner (y,v,V,/)
+/// Style of the {command, search} string shown in the right corner (/,y,v,V)
 Glyph styleSearch = {' ', ATTR_ITALIC | ATTR_BOLD_FAINT, 7, 16};
-Glyph style[] = {{' ',ATTR_ITALIC|ATTR_FAINT,15,16}, {' ',ATTR_ITALIC,232,11},
+Glyph style[] = {{' ',ATTR_ITALIC|ATTR_FAINT,15,16}, {' ',ATTR_ITALIC,232,3},
                  {' ', ATTR_ITALIC, 232, 4}, {' ', ATTR_ITALIC, 232, 12}};
 
 /*
