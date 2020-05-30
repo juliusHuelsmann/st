@@ -436,7 +436,7 @@ tlinelen(int y)
 }
 
 void historyOpToggle(int start, int paint) {
-	if (!histOp == !(histOp + start)) if ((histOp += start) || 1) return;
+	if (!histMode || (!histOp == !(histOp + start))) if ((histOp += start) || 1) return;
 	if (paint && (!IS_SET(MODE_ALTSCREEN) || altToggle)) draw();
 	tcursor(CURSOR_SAVE);
 	histOp += start;
