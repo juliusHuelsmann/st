@@ -5,7 +5,9 @@ in my personal `st` build.
 This repository can be cloned in order to try out one of the aforementioned
 patches in a functional environment. It also serves to port the patches to
 new versions of `st` and thus holds the most recent releases in the release
-page.
+page. Pull requests are to be issued in the development repositories for 
+[vim browse](https://github.com/juliusHuelsmann/st-history-vim) and
+[alpha focus](https://github.com/juliusHuelsmann/st-focus) respectively.
 
 **Vim Browse** adds history-functionality to the terminal, and allows to -- among
 other things -- select, yank, search it via keyboard using vim-like motions and
