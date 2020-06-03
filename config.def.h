@@ -133,7 +133,7 @@ unsigned int const highlightBg = 160, highlightFg = 15;
 char const wDelS[] = "!\"#$%&'()*+,-./:;<=>?@[\\]^`{|}~", wDelL[] = " \t";
 char *nmKeys [] = {              ///< Shortcusts executed in normal mode
   "R/Building\nN", "r/Building\n", "X/juli@machine\nN", "x/juli@machine\n",
-  "Q/[Leaving vim, starting execution]\nN","F/: error:\nN", "f/: error:\n", "SQf"
+  "Q?[Leaving vim, starting execution]\n","F/: error:\nN", "f/: error:\n", "DQf"
 };
 unsigned int const amountNmKeys = sizeof(nmKeys) / sizeof(*nmKeys);
 /// Style of the {command, search} string shown in the right corner (/,y,v,V)

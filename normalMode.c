@@ -21,7 +21,8 @@ struct NormalModeState {
 } defaultNormalMode, state;
 DynamicArray searchStr=UTF8_ARRAY, cCmd=UTF8_ARRAY, lCmd=UTF8_ARRAY;
 Glyph styleCmd;
-char posBuffer[10], brack[6][2] = { {"()"}, {"<>"}, {"{}"}, {"[]"}, {"\"\""}, {"''"}}, exited=1;
+char posBuffer[10], brack[6][2] = { {"()"}, {"<>"}, {"{}"}, {"[]"}, {"\"\""}, {"''"}};
+int exited=1, overlay=1;
 static inline uint32_t cchar() { return term.line[term.c.y][term.c.x].u; }
 static inline int pos(int p, int h) {return IS_SET(MODE_ALTSCREEN)?p:rangeY(p+h*histOff-insertOff);}
 static inline int contains(char c, char const * values, uint32_t memSize) {
@@ -70,7 +71,7 @@ static int findString(int8_t s, int all) {
 /// Execute series of normal-mode commands from char array / decoded from dynamic array
 static ExitState pressKeys(char const* s, size_t e) {
 	ExitState x=succ;
-	for (size_t i=0; i<e && (x=s[i] == ' ' ? x : kpressHist(&s[i], 1, 0, NULL)); ++i);
+	for (size_t i=0; i<e && (x=(!s[i] ? x : kpressHist(&s[i], 1, 0, NULL))); ++i);
 	return x;
 }
 static ExitState executeCommand(uint32_t *c, size_t z) {
@@ -89,10 +90,10 @@ static ExitState expandExpression(char c) { //    ({ =>)       l  ?  {  \n | l |
 	int a=state.cmd.infix==infix_a, yank=state.cmd.op=='y', lc=tolower(c), found=1;
 	state.cmd.infix = infix_none;
 	if(!yank && state.cmd.op!=visual && state.cmd.op!=visualLine) return failed;
-	char mot[11] = {'l', ' ', 'b', ' ', ' ', 'v', ' ', 'e', ' ', ' ', yank ? 'y' : ' '};
-	if (lc == 'w') mot[2] = 'b' - lc + c, mot[7] = (a ? 'w' : 'e') - lc + c, mot[9]=a?'h':' ';
+	char mot[11] = {'l', 0, 'b', 0, 0, 'v', 0, 'e', 0, 0, yank ? 'y' : 0};
+	if (lc == 'w') mot[2] = 'b' - lc + c, mot[7] = (a ? 'w' : 'e') - lc + c, mot[9]=a?'h':0;
 	else {
-		mot[1]='?', mot[3]=mot[8]='\n', mot[6]='/', mot[4]=a?' ':'l', mot[9]=a?' ':'h';
+		mot[1]='?', mot[3]=mot[8]='\n', mot[6]='/', mot[4]=a?0:'l', mot[9]=a?0:'h';
 		for (int i=found=0; !found && i < 6; ++i) 
 			if ((found=contains(c,brack[i],2))) mot[2]=brack[i][0], mot[7]=brack[i][1];
 	}
@@ -109,6 +110,7 @@ int executeMotion(char const cs, int len, KeySym const *const ks) {
 	else if (ks && *ks == XK_u) historyMove(0, 0, -term.row / 2);
 	else if (ks && *ks == XK_f) historyMove(0, 0, term.row-1+(term.c.y=0));
 	else if (ks && *ks == XK_b) historyMove(0, 0, -(term.c.y=term.row-1));
+	else if (ks && *ks == XK_h) overlay = !overlay;
 	else if (!len) return failed;
 	else if (cs == 'K') historyMove(0, 0, -state.m.c);
 	else if (cs == 'J') historyMove(0, 0,  state.m.c);
@@ -133,11 +135,11 @@ int executeMotion(char const cs, int len, KeySym const *const ks) {
 		int const low=cs<=90, off=tolower(cs)!='w', sgn=(tolower(cs)=='b')?-1:1,
 		          l=strlen(wDelL), s=strlen(wDelS), mit=rows()*term.col;
 		for (int it=0, on=0; state.m.c > 0; ++it) {
-			if (off || it) historyMove(sgn, 0, 0);        //< offset move if required
+			if (off || it) if (!historyMove(sgn, 0, 0)) it = mit;        //< offset move
 			int n = 1<<(contains(cchar(),wDelS,s) ?(2-low) :!contains(cchar(),wDelL,l)),
 			    found = (on|=n)^n && ((off ?on^n :n)!=1); //< state change &letter state
-			if (found && off) historyMove(-sgn, 0, 0);    //< offset move if required
-			if (found || it>mit) it=on=n=0, --state.m.c;  //< terminate iteration.
+			if (found && off) historyMove(-sgn, 0, 0);       //< offset move if required
+			if (found || it>mit) it=on=0, --state.m.c;           //< terminate iteration
 		}
 	} else return failed;
 	state.m.c = 0;
@@ -147,7 +149,7 @@ int executeMotion(char const cs, int len, KeySym const *const ks) {
 ExitState kpressHist(char const *cs, int len, int ctrl, KeySym const *ksym) {
 	historyOpToggle(1, 1);
 	int const prevYOff=IS_SET(MODE_ALTSCREEN)?0:histOff, search=state.m.search&&state.m.active,
-	          prevAltToggle=altToggle;
+	          prevAltToggle=altToggle, prevOverlay=overlay;
 	int const noOp=!state.cmd.op&&!state.cmd.infix, num=len==1&&BETWEEN(cs[0],48,57),
 	          esc=ksym&&*ksym==XK_Escape, ret=(ksym&&*ksym==XK_Return)||(len==1&&cs[0]=='\n'), 
 	          quantifier=num&&(cs[0]!='0'||state.m.c), ins=!search &&noOp &&len &&cs[0]=='i';
@@ -242,8 +244,10 @@ ExitState kpressHist(char const *cs, int len, int ctrl, KeySym const *ksym) {
 	int const posLin = !IS_SET(MODE_ALTSCREEN) ? rangeY(insertOff-histOff):0, h=rows()-term.row;
 	if (!posLin || posLin==h || !h) strcpy(posBuffer, posLin ? " [BOT] " : " [TOP] ");
 	else sprintf(posBuffer, " % 3d%c  ", min(100, max(0, .5 + posLin * 100. / h)),'%');
-	if (!term.dirty[term.row-1]) xdrawline(term.line[term.row-1], term.col*2/3, term.row-1, term.col-1);
-	if (!term.dirty[term.row-2]) xdrawline(term.line[term.row-2], term.col*2/3, term.row-2, term.col-1);
+	if ((overlay || overlay!=prevOverlay) && term.col>9 && term.row>4) {
+		if (!term.dirty[term.row-1]) xdrawline(term.line[term.row-1], term.col*2/3, term.row-1, term.col-1);
+		if (!term.dirty[term.row-2]) xdrawline(term.line[term.row-2], term.col*2/3, term.row-2, term.col-1);
+	}
 	if (result==finished) altToggle = 0;
 	if (altToggle != prevAltToggle) tswapscreen();
 end:
@@ -254,13 +258,14 @@ end:
 void historyOverlay(int x, int y, Glyph* g) {
 	if (!histMode) return;
 	TCursor const *cHist = histOp ? &term.c : &c[0];
-	if((x > (2*term.col/3)) && (y >= (term.row-2))) {
+	if(overlay && term.col > 9 && term.row > 4 && (x > (2*term.col/3)) && (y >= (term.row-2))) {
 		*g = (y == term.row - 2) ? styleSearch : styleCmd;
 		if (y == term.row-2) getChar(&searchStr, g, term.row-2, term.col-2, term.col/3, x);
 		else if (x > term.col - 7) g->u = posBuffer[x - term.col + 7];
 		else getChar(size(&cCmd) ?&cCmd :&lCmd, g, term.row-1, term.col-7, term.col/3-6, x);
 	} else if (highlighted(x, y)) g->bg = highlightBg, g->fg = highlightFg;
-	else if ((x==cHist->x) || (y==cHist->y)) g->bg = currentBg;
+	else if ((x==cHist->x) ^ (y==cHist->y)) g->bg = currentBg;
+	else if (x==cHist->x) g->mode^=ATTR_REVERSE;
 }
 void historyPreDraw() {
 	static Pos op = {.p={0, 0, 0}};
