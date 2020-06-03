@@ -436,11 +436,11 @@ tlinelen(int y)
 }
 
 void historyOpToggle(int start, int paint) {
-	if (!histMode || (!histOp == !(histOp + start))) if ((histOp += start) || 1) return;
-	if (paint && (!IS_SET(MODE_ALTSCREEN) || altToggle)) draw();
+	if (!histOp == !(histOp + start)) if ((histOp += start) || 1) return;
+	if (histMode && paint && (!IS_SET(MODE_ALTSCREEN) || altToggle)) draw();
 	tcursor(CURSOR_SAVE);
 	histOp += start;
-	if (altToggle) {
+	if (histMode && altToggle) {
 		tswapscreen();
 		memset(term.dirty,0,sizeof(*term.dirty)*term.row);
 	}
