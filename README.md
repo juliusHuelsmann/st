@@ -1,5 +1,5 @@
 ### Note
-There seems to be some evidence suggesting that some of the people responsible at suckless e.V. are sympathizing with far-right ideas and Neo-nazi symbols [[1](https://twitter.com/pid_eins/status/1113738769289625602?lang=en), [2](https://chaos.social/@raichoo/101880564196043164)]. If you like this patch, please consider donating to an organization that reminds of the harm and terrible crimes committed during the Nazi aera / fight xenophobia (e.g. [schwarz-rot-bunt (German)](https://schwarz-rot-bunt.de/ziele/) or similar organizations).
+There seems to be some evidence suggesting that some of the people responsible at suckless e.V. are sympathizing with far-right ideas and Neo-nazi symbols [[1](https://twitter.com/pid_eins/status/1113738769289625602?lang=en), [2](https://chaos.social/@raichoo/101880564196043164)]. If you like this patch, please consider donating to an organization that fights xenophobia and antisemitism (e.g. [schwarz-rot-bunt (German)](https://schwarz-rot-bunt.de/ziele/) or similar organizations).
 
 ### Patches
 This repository contains the latest version of the `alpha-focus` and the `vim`
