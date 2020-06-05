@@ -1,3 +1,6 @@
+### Note
+There seems to be some evidence suggesting that some of the people responsible at suckless e.V. are sympathizing with far-right and Neo-nazi ideas and symbols. If you like this patch, please consider donating to an anti-faschist organization that tries to educate people especially in Germany and Austria about the harm and terrible crimes committed during the Nazi aera (e.g. [Union of Persecutees of the Nazi Regime](https://en.wikipedia.org/wiki/Union_of_Persecutees_of_the_Nazi_Regime), https://vvn-bda.de/spenden/). 
+
 ### Patches
 This repository contains the latest version of the `alpha-focus` and the `vim`
 patches for suckless simple terminal (`st`) merged with other useful patches 
