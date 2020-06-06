@@ -23,8 +23,8 @@ Xcursor.theme: smalldot
 
 ! general st settings (which can be overwritten in custom xresources
 st.font: hack:pixelsize=19:antialias=true:autohint=true
-st.alpha: 0.90
-st.alphaUnfocused: 0.80
+st.alpha: 0.95
+st.alphaUnfocused: 0.85
 
 st.chscale: 0.74;
 st.cwscale: 0.94;
