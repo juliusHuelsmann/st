@@ -1773,10 +1773,10 @@ focus(XEvent *ev)
 		if (IS_SET(MODE_FOCUS))
 			ttywrite("\033[I", 3, 0);
 		if (!focused) {
+			focused = 1;
 			xloadcols();
 			redraw();
 		}
-		focused = 1;
 	} else {
 		if (xw.ime.xic)
 			XUnsetICFocus(xw.ime.xic);
@@ -1784,10 +1784,10 @@ focus(XEvent *ev)
 		if (IS_SET(MODE_FOCUS))
 			ttywrite("\033[O", 3, 0);
 		if (focused) {
+			focused = 0;
 			xloadcols();
 			redraw();
 		}
-		focused = 0;
 	}
 }
 
