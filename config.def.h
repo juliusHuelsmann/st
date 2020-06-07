@@ -126,7 +126,7 @@ unsigned int defaultfg = 7;
 unsigned int defaultbg = 0;
 static unsigned int defaultcs = 256;
 static unsigned int defaultrcs = 257;
-unsigned int bg = 1, bgUnfocused = 0;
+unsigned int bg=16, bgUnfocused=0;
 unsigned int const currentBg = 8, buffSize = 2048;
 /// [Vim Browse] Colors for search results currently on screen.
 unsigned int const highlightBg = 160, highlightFg = 15;
