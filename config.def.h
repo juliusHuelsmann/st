@@ -93,6 +93,9 @@ char *termname = "st-256color";
  */
 unsigned int tabspaces = 8;
 
+/* bg opacity */
+float alpha = 0.8, alphaUnfocused = 0.6;
+
 /* Terminal colors (16 first used in escape sequence) */
 static const char *colorname[] = {
 	/* 8 normal colors */
@@ -120,6 +123,7 @@ static const char *colorname[] = {
 	/* more colors can be added after 255 to use with DefaultXX */
 	"#cccccc",
 	"#555555",
+	"black",
 };
 
 
@@ -131,6 +135,20 @@ unsigned int defaultfg = 7;
 unsigned int defaultbg = 0;
 static unsigned int defaultcs = 256;
 static unsigned int defaultrcs = 257;
+unsigned int bg=16, bgUnfocused=0;
+unsigned int const currentBg = 8, buffSize = 2048;
+/// [Vim Browse] Colors for search results currently on screen.
+unsigned int const highlightBg = 160, highlightFg = 15;
+char const wDelS[] = "!\"#$%&'()*+,-./:;<=>?@[\\]^`{|}~", wDelL[] = " \t";
+char *nmKeys [] = {              ///< Shortcusts executed in normal mode
+  "R/Building\nN", "r/Building\n", "X/juli@machine\nN", "x/juli@machine\n",
+  "Q?[Leaving vim, starting execution]\n","F/: error:\nN", "f/: error:\n", "DQf"
+};
+unsigned int const amountNmKeys = sizeof(nmKeys) / sizeof(*nmKeys);
+/// Style of the {command, search} string shown in the right corner (y,v,V,/)
+Glyph styleSearch = {' ', ATTR_ITALIC | ATTR_BOLD_FAINT, 7, 16};
+Glyph style[] = {{' ',ATTR_ITALIC|ATTR_FAINT,15,16}, {' ',ATTR_ITALIC,232,3},
+                 {' ', ATTR_ITALIC, 232, 4}, {' ', ATTR_ITALIC, 232, 12}};
 
 /*
  * Default shape of cursor
@@ -191,14 +209,15 @@ static Shortcut shortcuts[] = {
 	{ ControlMask,          XK_Print,       toggleprinter,  {.i =  0} },
 	{ ShiftMask,            XK_Print,       printscreen,    {.i =  0} },
 	{ XK_ANY_MOD,           XK_Print,       printsel,       {.i =  0} },
-	{ TERMMOD,              XK_Prior,       zoom,           {.f = +1} },
-	{ TERMMOD,              XK_Next,        zoom,           {.f = -1} },
+	{ MODKEY,               XK_m,           zoom,           {.f = +1} },
+	{ MODKEY,               XK_n,           zoom,           {.f = -1} },
 	{ TERMMOD,              XK_Home,        zoomreset,      {.f =  0} },
-	{ TERMMOD,              XK_C,           clipcopy,       {.i =  0} },
-	{ TERMMOD,              XK_V,           clippaste,      {.i =  0} },
+	{ MODKEY|ShiftMask,     XK_C,           clipcopy,       {.i =  0} },
+	{ MODKEY|ShiftMask,     XK_V,           clippaste,      {.i =  0} },
 	{ TERMMOD,              XK_Y,           selpaste,       {.i =  0} },
 	{ ShiftMask,            XK_Insert,      selpaste,       {.i =  0} },
 	{ TERMMOD,              XK_Num_Lock,    numlock,        {.i =  0} },
+	{ MODKEY,               XK_c,           normalMode,     {.i =  0} },
 };
 
 /*
