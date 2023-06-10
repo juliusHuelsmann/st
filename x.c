@@ -809,6 +809,7 @@ void normalMode() { historyModeToggle((win.mode ^=MODE_NORMAL) & MODE_NORMAL); }
 void
 xloadalpha(void)
 {
+	xloadcolor(focused ?bg :bgUnfocused, NULL, &dc.col[defaultbg]);
 	float const usedAlpha = focused ? alpha : alphaUnfocused;
 	if (opt_alpha) alpha = strtof(opt_alpha, NULL);
 	dc.col[defaultbg].color.alpha = (unsigned short)(0xffff * usedAlpha);
@@ -834,8 +835,6 @@ xloadcols(void)
 			else
 				die("could not allocate color %d\n", i);
 		}
-	if (dc.collen) // cannot die, as the color is already loaded.
-		xloadcolor(focused ?bg :bgUnfocused, NULL, &dc.col[defaultbg]);
 
 	xloadalpha();
 	loaded = 1;
@@ -1784,7 +1783,7 @@ focus(XEvent *ev)
 			ttywrite("\033[I", 3, 0);
 		if (!focused) {
 			focused = 1;
-			xloadcols();
+			xloadalpha();
 			tfulldirt();
 		}
 	} else {
@@ -1795,7 +1794,7 @@ focus(XEvent *ev)
 			ttywrite("\033[O", 3, 0);
 		if (focused) {
 			focused = 0;
-			xloadcols();
+			xloadalpha();
 			tfulldirt();
 		}
 	}
